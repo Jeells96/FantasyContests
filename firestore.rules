@@ -1,0 +1,131 @@
+rules_version = '2';
+
+/**
+ * Fantasy Contests security rules.
+ *
+ * Enforced on the server, independent of the UI:
+ *   - only the admin account can create or change contests, player pools,
+ *     salaries, salary caps, scoring settings, normalization factors, live
+ *     statistics and results;
+ *   - a user may only write their own entry, and only before the contest locks;
+ *   - before lock nobody can read another user's lineup or game-winner picks —
+ *     not even by listing the collection;
+ *   - after lock entries become readable so the leaderboard can show rosters,
+ *     and nobody (user or admin) can alter them;
+ *   - nothing a user can write contains a score: scores are derived from the
+ *     admin-written player pool, so a user cannot award themselves points.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * The admin is a single Firebase Auth email/password account. The PIN in the
+     * UI unlocks that account; the email claim below is what the server trusts.
+     * Anonymous visitors never carry an email claim.
+     */
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'admin@fantasycontests.app';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function contestData(contestId) {
+      return get(/databases/$(database)/documents/contests/$(contestId)).data;
+    }
+
+    /** The whole contest locks when its first game is scheduled to begin. */
+    function contestLocked(contestId) {
+      let contest = contestData(contestId);
+      return contest.keys().hasAny(['lockAt']) && request.time >= contest.lockAt;
+    }
+
+    function validEntry(contestId, uid) {
+      let contest = contestData(contestId);
+      let entry = request.resource.data;
+      return entry.keys().hasOnly(['uid', 'displayName', 'lineup', 'picks', 'salaryUsed', 'submittedAt', 'updatedAt', 'lockedSnapshot'])
+        && entry.keys().hasAll(['uid', 'displayName', 'lineup', 'picks', 'salaryUsed', 'submittedAt', 'updatedAt'])
+        && entry.uid == uid
+        && entry.displayName is string
+        && entry.displayName.size() > 0
+        && entry.displayName.size() <= 60
+        && entry.lineup is list
+        && entry.lineup.size() == contest.rosterSlots.size()
+        && entry.picks is map
+        && entry.salaryUsed is number
+        && entry.salaryUsed >= 0
+        && entry.salaryUsed <= contest.salaryCapInfo.cap
+        && (contest.gameWinner.enabled != true || entry.picks.size() == contest.games.size());
+    }
+
+    /**
+     * Public entrant record. Deliberately limited to a name and a submitted
+     * flag: there is no field here a user could use to publish a roster, a pick
+     * or a score.
+     */
+    function validStanding(uid) {
+      let standing = request.resource.data;
+      return standing.keys().hasOnly(['uid', 'displayName', 'enteredAt', 'submitted'])
+        && standing.uid == uid
+        && standing.displayName is string
+        && standing.displayName.size() > 0
+        && standing.displayName.size() <= 60
+        && standing.submitted is bool;
+    }
+
+    match /contests/{contestId} {
+      // Contest configuration is public to read and admin-only to write. This
+      // covers games, roster format, scoring, salary cap, normalization factors,
+      // the game-winner bonus and the final results.
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+
+      // Player pool: salaries, projections and live statistics.
+      match /pool/{chunkId} {
+        allow get, list: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      // Lineups and game-winner picks.
+      match /entries/{uid} {
+        allow get: if isOwner(uid) || isAdmin() || contestLocked(contestId);
+        // Listing is what would otherwise leak every roster at once.
+        allow list: if isAdmin() || contestLocked(contestId);
+
+        allow create: if isOwner(uid)
+          && !contestLocked(contestId)
+          && validEntry(contestId, uid);
+        allow update: if isOwner(uid)
+          && !contestLocked(contestId)
+          && resource.data.uid == uid
+          && validEntry(contestId, uid);
+        // Entries are immutable once locked, and are never deleted by users.
+        allow delete: if isAdmin() && !contestLocked(contestId);
+      }
+
+      match /standings/{uid} {
+        allow get, list: if true;
+        allow create, update: if isOwner(uid)
+          && !contestLocked(contestId)
+          && validStanding(uid);
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Optional admin-managed application settings.
+    match /config/{document} {
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

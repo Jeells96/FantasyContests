@@ -44,7 +44,7 @@ export function SalaryBar({
           tone={averagePerSpot !== null && averagePerSpot < 0 ? 'bad' : undefined}
         />
         <Metric label="Roster" value={`${filled}/${total}`} />
-        {action}
+        <div className="salarybar__action">{action}</div>
       </div>
       {blocker ? <div className="salarybar__blocker">{blocker}</div> : null}
 

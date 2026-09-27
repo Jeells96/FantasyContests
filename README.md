@@ -21,8 +21,9 @@ statistical events.
   with the amount you have left, rather than being added and rejected at submission. When a lineup is not
   submittable yet, the footer says exactly what is missing.
 - The pinned footer tracks salary used, salary remaining, the average left per unfilled spot, and roster
-  progress. Once the roster is full it offers *Next*, which moves on to the game-winner picks, and becomes
-  *Submit* once those are made.
+  progress, with the action on its own full-width row beneath. Once the roster is full it offers *Next*, which
+  moves on to the game-winner picks, and becomes *Submit* once those are made. Saving goes straight to the
+  leaderboard.
 - Make a game-winner pick for every game when the admin enables it.
 - Watch a live leaderboard with broadcast-style scoring animations.
 

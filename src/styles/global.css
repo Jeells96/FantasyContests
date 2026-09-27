@@ -702,9 +702,38 @@ h4 {
 
 .salarybar__grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
-  gap: 6px;
+  /*
+   * On a phone the action gets its own full-width row. Squeezing four figures
+   * and a button onto one line depends on how wide the font happens to render,
+   * and the button is the one thing that must never be clipped.
+   */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 8px;
   align-items: center;
+}
+
+.salarybar__action {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+
+.salarybar__action .btn {
+  width: 100%;
+}
+
+@media (min-width: 560px) {
+  .salarybar__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  }
+
+  .salarybar__action {
+    grid-column: auto;
+    margin-top: 0;
+  }
+
+  .salarybar__action .btn {
+    width: auto;
+  }
 }
 
 .salarybar__blocker {

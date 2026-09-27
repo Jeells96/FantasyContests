@@ -200,6 +200,9 @@ export function ContestPage() {
       });
       markEntered(contest.id);
       setMessage({ tone: 'ok', text: myEntry ? 'Lineup updated.' : 'Lineup submitted. Good luck!' });
+      // Saving finishes the job, so show where the entry now stands.
+      setTab('board');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       setMessage({
         tone: 'bad',

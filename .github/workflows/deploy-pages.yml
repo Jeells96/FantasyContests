@@ -1,8 +1,10 @@
 name: Deploy to GitHub Pages
 
 # Publishes the built app to https://<owner>.github.io/<repo>/.
-# Requires the repository's Pages source to be set to "GitHub Actions"
-# (Settings → Pages → Build and deployment → Source).
+# The repository's Pages source must be "GitHub Actions"
+# (Settings → Pages → Build and deployment → Source); on "Deploy from a branch"
+# GitHub publishes the repository root over this build and the page renders
+# blank, which the verification step at the end catches.
 on:
   push:
     branches:
@@ -58,37 +60,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # While the repository's Pages source is "Deploy from a branch", GitHub
-      # also runs its own "pages build and deployment" on every push to main,
-      # publishing the repository root — the unbuilt source — over this build.
-      # Deploying after it finishes is what keeps the built site live.
-      #
-      # Setting Pages → Source to "GitHub Actions" stops that second build
-      # entirely, at which point these two steps can be deleted.
-      - name: Wait for the branch-based Pages build to finish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for attempt in $(seq 1 40); do
-            running=$(gh api "repos/${{ github.repository }}/actions/runs?per_page=30" \
-              --jq '[.workflow_runs[]
-                     | select(.path == "dynamic/pages/pages-build-deployment")
-                     | select(.status != "completed")] | length' 2>/dev/null || echo 0)
-            if [ "$running" = "0" ]; then
-              echo "No branch-based Pages build in flight."
-              break
-            fi
-            echo "Branch-based Pages build still running (check $attempt)…"
-            sleep 10
-          done
-          # Let its deployment settle before publishing over it.
-          sleep 25
-
       - id: deployment
         uses: actions/deploy-pages@v4
 
-      # Fail loudly rather than leave a blank page up: if the branch build won
-      # anyway, the site is serving /src/main.tsx instead of the bundle.
+      # Cheap safety net: confirm the bundle is actually being served rather
+      # than the repository source, which is what a misconfigured Pages source
+      # produces — a blank page with no other warning.
       - name: Verify the built site is being served
         run: |
           url="${{ steps.deployment.outputs.page_url }}"
@@ -101,5 +78,5 @@ jobs:
             echo "Still serving unbuilt source (check $attempt)…"
             sleep 15
           done
-          echo "::error::GitHub Pages is serving the repository source, not this build. Set Settings -> Pages -> Source to 'GitHub Actions'."
+          echo "::error::GitHub Pages is serving the repository source, not this build. Check Settings -> Pages -> Source is 'GitHub Actions'."
           exit 1

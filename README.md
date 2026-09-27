@@ -314,11 +314,10 @@ tie-breaker rules to be layered in later without touching the scoring path.
 `.github/workflows/deploy-pages.yml` builds the app and publishes it to
 `https://<owner>.github.io/<repo>/` on every push to `main`.
 
-**Set Settings → Pages → Source to "GitHub Actions".** While it is left on "Deploy from a branch", GitHub also
-runs its own build on each push, which publishes the repository root — the unbuilt `index.html` — over this
-one, and the site renders blank. The workflow waits 90 seconds before deploying so it lands last and the site
-self-heals, but that wait is only a workaround: once the source is set to "GitHub Actions" the second build
-stops running and the wait step can be deleted.
+The repository's **Settings → Pages → Source** must be **GitHub Actions**. On "Deploy from a branch" GitHub
+runs its own build on each push that publishes the repository root — the unbuilt `index.html` — over this one,
+and the site renders blank. The workflow's last step fetches the live URL and fails the run if that happens,
+so a misconfiguration shows up as a red build rather than a blank page.
 
 ## Known limitations
 

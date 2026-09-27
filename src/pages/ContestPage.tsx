@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { GamePicks } from '../components/GamePicks';
 import { LeaderboardList } from '../components/LeaderboardList';
@@ -40,6 +40,7 @@ export function ContestPage() {
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const picksRef = useRef<HTMLDivElement | null>(null);
 
   // Adopt the saved entry once, then let local edits stand.
   useEffect(() => {
@@ -77,6 +78,13 @@ export function ContestPage() {
       locked,
     });
   }, [contest, standings, entries, myEntry, playersById, uid, locked]);
+
+  const rosterComplete = Boolean(validation && validation.filledSlots === contest?.rosterSlots.length);
+  const picksComplete =
+    !contest?.gameWinner.enabled || contest.games.every((game) => Boolean(picks[game.id]));
+  // With the roster done but picks outstanding, the button moves the user on to
+  // the picks rather than sitting disabled.
+  const showNext = rosterComplete && !picksComplete && Boolean(validation?.filledSlots);
 
   const activeSlot = contest?.rosterSlots.find((slot) => slot.id === activeSlotId) ?? null;
   const occupantOfActiveSlot = activeSlotId ? lineup.find((line) => line.slotId === activeSlotId) : undefined;
@@ -349,7 +357,7 @@ export function ContestPage() {
                 </div>
 
                 {contest.gameWinner.enabled ? (
-                  <div className="card">
+                  <div className="card" ref={picksRef}>
                     <div className="section-title">
                       <h2 style={{ fontSize: 15 }}>Game winners</h2>
                       <span className="tiny faint">
@@ -393,16 +401,26 @@ export function ContestPage() {
           used={salaryUsed}
           filled={validation?.filledSlots ?? 0}
           total={contest.rosterSlots.length}
-          blocker={validation && !validation.valid ? validation.errors[0] : null}
+          blocker={showNext ? null : validation && !validation.valid ? validation.errors[0] : null}
           action={
-            <button
-              type="button"
-              className="btn btn--go"
-              disabled={!validation?.valid || saving || !identity}
-              onClick={submit}
-            >
-              {saving ? <span className="spinner" /> : myEntry ? 'Update' : 'Submit'}
-            </button>
+            showNext ? (
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => picksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--go"
+                disabled={!validation?.valid || saving || !identity}
+                onClick={submit}
+              >
+                {saving ? <span className="spinner" /> : myEntry ? 'Update' : 'Submit'}
+              </button>
+            )
           }
         />
       ) : null}

@@ -20,6 +20,9 @@ statistical events.
 - Tapping a player adds them; tapping them again takes them back out. A player you cannot afford is refused
   with the amount you have left, rather than being added and rejected at submission. When a lineup is not
   submittable yet, the footer says exactly what is missing.
+- The pinned footer tracks salary used, salary remaining, the average left per unfilled spot, and roster
+  progress. Once the roster is full it offers *Next*, which moves on to the game-winner picks, and becomes
+  *Submit* once those are made.
 - Make a game-winner pick for every game when the admin enables it.
 - Watch a live leaderboard with broadcast-style scoring animations.
 

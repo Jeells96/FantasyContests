@@ -27,12 +27,22 @@ export function SalaryBar({
   const remaining = cap - used;
   const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
   const over = remaining < 0;
+  // What every still-empty spot can average if the rest of the cap is split
+  // evenly between them — the number that tells you whether the lineup you are
+  // part-way through can actually be finished.
+  const openSpots = Math.max(0, total - filled);
+  const averagePerSpot = openSpots > 0 ? Math.floor(remaining / openSpots) : null;
 
   return (
     <div className="salarybar">
       <div className="salarybar__grid">
         <Metric label="Salary" value={formatMoney(used)} tone={over ? 'bad' : undefined} />
         <Metric label="Remaining" value={formatMoney(remaining)} tone={over ? 'bad' : undefined} />
+        <Metric
+          label="Avg/spot"
+          value={averagePerSpot === null ? '—' : formatMoney(averagePerSpot)}
+          tone={averagePerSpot !== null && averagePerSpot < 0 ? 'bad' : undefined}
+        />
         <Metric label="Roster" value={`${filled}/${total}`} />
         {action}
       </div>

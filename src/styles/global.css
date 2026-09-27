@@ -38,6 +38,8 @@ html,
 body {
   margin: 0;
   padding: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -111,9 +113,20 @@ h4 {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
   font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.appbar > .tiny {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .appbar__logo {
@@ -170,6 +183,17 @@ h4 {
 .grid {
   display: grid;
   gap: 12px;
+}
+
+/*
+ * Grid and flex children default to min-width:auto, which refuses to shrink
+ * below their content. One long stat line inside a player card is then enough
+ * to widen the whole column past the screen and scroll the page sideways.
+ */
+.grid > *,
+.stack > *,
+.list > * {
+  min-width: 0;
 }
 
 @media (min-width: 780px) {
@@ -363,6 +387,11 @@ h4 {
   background: linear-gradient(140deg, #4ade80, var(--accent-deep));
   border-color: transparent;
   color: #04240f;
+}
+
+.salarybar .btn {
+  padding: 10px 14px;
+  white-space: nowrap;
 }
 
 .btn--danger {
@@ -577,14 +606,19 @@ h4 {
 }
 
 .player__name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  /* Block rather than flex: text-overflow does not apply to a flex container,
+     so a long name would clip mid-letter instead of showing an ellipsis. */
+  display: block;
   font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.player__name .pill {
+  margin-left: 5px;
+  vertical-align: middle;
 }
 
 .player__meta {
@@ -662,9 +696,20 @@ h4 {
 
 .salarybar__grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 8px;
   align-items: center;
+}
+
+.salarybar__blocker {
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #ffe6a8;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .metric {
@@ -672,18 +717,23 @@ h4 {
 }
 
 .metric__label {
-  font-size: 10px;
+  font-size: 9.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 
 .metric__value {
-  font-size: 15px;
+  font-size: clamp(13px, 3.8vw, 15px);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .metric__value--bad {

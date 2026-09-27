@@ -12,10 +12,8 @@ export interface LineupValidation {
 /**
  * Validate a lineup against the contest's own rules.
  *
- * A lineup does not have to be full: an entrant who spends their cap before
- * filling every spot can submit as they are, and the empty spots simply score
- * nothing. What is enforced is that every player is real, used once, eligible
- * for the spot they occupy, and that the roster is inside the salary cap.
+ * Every roster spot must be filled, each player is real and used once, each is
+ * eligible for the spot they occupy, and the roster fits inside the salary cap.
  *
  * Used by the builder to gate submission and again when scoring, so an entry
  * crafted outside the UI cannot buy an illegal roster: the leaderboard
@@ -65,8 +63,8 @@ export function validateLineup(
     filledSlots += 1;
   }
 
-  if (filledSlots === 0) {
-    errors.push('Pick at least one player');
+  for (const slot of slots) {
+    if (!seenSlots.has(slot.id)) errors.push(`${slot.label} is empty`);
   }
 
   if (salaryCap > 0 && salaryUsed > salaryCap) {

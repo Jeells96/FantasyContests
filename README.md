@@ -16,10 +16,10 @@ statistical events.
 - Browse open, live and completed contests.
 - Build one lineup per contest against an automatically calculated salary cap, with player cards showing
   headshots, position, team, opponent, salary, season stats, projections and live points.
-- Roster spots are interchangeable — any player fits any spot — and a lineup does not have to be full: spend
-  the cap on a few stars instead of a full roster of ordinary players if you prefer. Empty spots score nothing.
+- Roster spots are interchangeable — any player fits any spot — and every spot must be filled to submit.
 - Tapping a player adds them; tapping them again takes them back out. A player you cannot afford is refused
-  with the amount you have left, rather than being added and rejected at submission.
+  with the amount you have left, rather than being added and rejected at submission. When a lineup is not
+  submittable yet, the footer says exactly what is missing.
 - Make a game-winner pick for every game when the admin enables it.
 - Watch a live leaderboard with broadcast-style scoring animations.
 
@@ -203,12 +203,10 @@ A slate with one elite player prices him at the ceiling; a slate full of them sp
 Measured from the pool: the cheapest legal lineup, a median-priced lineup and the most expensive legal lineup
 are each constructed, and the cap is placed ~62% of the way from median to maximum, with guards so it can never
 reach 92% of the all-stars lineup and never falls below what a complete roster costs. On real slates this lands
-around 68% of the all-stars lineup — roughly where a mainstream DFS site sits. Two or three premium players
-fit; paying for them means economising everywhere else.
+around 80% of the all-stars lineup — several stars fit, all of them never do.
 
-Because rosters are positionless and need not be filled, the cap is the real constraint on a lineup, and the
-trade-off it creates is the interesting one: a few expensive stars with spots left empty, or a full roster of
-cheaper players.
+Because rosters are positionless, the cap is the real constraint on a lineup: every spot must be filled, so
+paying up for stars means finding value in the spots that are left.
 
 ### Roster format (`src/lib/engine/roster.ts`)
 Contests default to interchangeable spots (9 for NFL, 11 for MLB, 8 for NBA, 9 for multi-sport), which is what

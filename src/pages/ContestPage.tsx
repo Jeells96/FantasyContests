@@ -376,12 +376,6 @@ export function ContestPage() {
                       ))}
                     </ul>
                   </div>
-                ) : validation && validation.filledSlots < contest.rosterSlots.length ? (
-                  <div className="banner">
-                    You can submit with {contest.rosterSlots.length - validation.filledSlots} spot
-                    {contest.rosterSlots.length - validation.filledSlots === 1 ? '' : 's'} left empty — an empty
-                    spot just scores nothing.
-                  </div>
                 ) : null}
               </div>
             </div>
@@ -399,6 +393,7 @@ export function ContestPage() {
           used={salaryUsed}
           filled={validation?.filledSlots ?? 0}
           total={contest.rosterSlots.length}
+          blocker={validation && !validation.valid ? validation.errors[0] : null}
           action={
             <button
               type="button"

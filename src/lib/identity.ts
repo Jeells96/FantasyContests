@@ -8,12 +8,48 @@
  */
 
 const STORAGE_KEY = 'fantasycontests.identity.v1';
+const DEVICE_KEY = 'fantasycontests.device.v1';
 
 export interface Identity {
   firstName: string;
   lastName: string;
   displayName: string;
   savedAt: string;
+}
+
+/**
+ * A stable random id for this device, used to own an entry.
+ *
+ * This replaces a signed-in user id: it is generated locally, stored with the
+ * name, and reused on later visits. It is unguessable, which is what keeps one
+ * player's entry from being found by another.
+ */
+export function deviceId(): string {
+  try {
+    const existing = localStorage.getItem(DEVICE_KEY);
+    if (existing) return existing;
+    const created = newId();
+    localStorage.setItem(DEVICE_KEY, created);
+    return created;
+  } catch {
+    // Storage blocked: fall back to a per-session id so play still works.
+    return sessionId();
+  }
+}
+
+let memoryId: string | null = null;
+
+function sessionId(): string {
+  if (!memoryId) memoryId = newId();
+  return memoryId;
+}
+
+function newId(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID().replace(/-/g, '');
+  const bytes = new Uint8Array(16);
+  cryptoApi?.getRandomValues?.(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export function loadIdentity(): Identity | null {

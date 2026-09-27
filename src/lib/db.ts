@@ -16,7 +16,7 @@ import {
   type Firestore,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { adminDb, db } from './firebase';
+import { db } from './firebase';
 import { poolChunkSignature } from './engine/liveSync';
 import type { Contest, ContestPlayer, Entry, LineupSelection, Standing } from '../types';
 
@@ -126,7 +126,7 @@ export interface CreateContestInput extends Omit<Contest, 'id' | 'createdAt' | '
 /** Create a contest and its player pool. Admin session only. */
 export async function createContest(input: CreateContestInput): Promise<string> {
   const { players, ...contest } = input;
-  const reference = doc(collection(adminDb, CONTESTS));
+  const reference = doc(collection(db, CONTESTS));
   const now = new Date().toISOString();
   const full: Contest = {
     ...contest,
@@ -137,7 +137,7 @@ export async function createContest(input: CreateContestInput): Promise<string> 
     updatedAt: now,
   };
 
-  const batch = writeBatch(adminDb);
+  const batch = writeBatch(db);
   batch.set(reference, contestToDoc(full));
   writePoolChunks(batch, reference.id, players);
   await batch.commit();
@@ -150,14 +150,14 @@ export async function updateContest(
   contest: Contest,
   players?: ContestPlayer[],
 ): Promise<void> {
-  const batch = writeBatch(adminDb);
+  const batch = writeBatch(db);
   batch.set(
-    doc(adminDb, CONTESTS, contestId),
+    doc(db, CONTESTS, contestId),
     { ...contestToDoc(contest), playerCount: players?.length ?? contest.playerCount },
     { merge: true },
   );
   if (players) {
-    const existing = await getDocs(collection(adminDb, CONTESTS, contestId, POOL));
+    const existing = await getDocs(collection(db, CONTESTS, contestId, POOL));
     for (const stale of existing.docs) batch.delete(stale.ref);
     writePoolChunks(batch, contestId, players);
   }
@@ -167,21 +167,25 @@ export async function updateContest(
 export async function patchContest(contestId: string, patch: Partial<Contest>): Promise<void> {
   const data: DocumentData = { ...patch, updatedAt: new Date().toISOString() };
   if (patch.lockTime) data.lockAt = Timestamp.fromDate(new Date(patch.lockTime));
-  await updateDoc(doc(adminDb, CONTESTS, contestId), data);
+  await updateDoc(doc(db, CONTESTS, contestId), data);
 }
 
 export async function deleteContest(contestId: string): Promise<void> {
   const collections = [POOL, ENTRIES, STANDINGS];
   for (const name of collections) {
-    const snapshot = await getDocs(collection(adminDb, CONTESTS, contestId, name));
+    // Entries cannot be listed before a contest locks, so a pre-lock delete may
+    // leave entry documents behind. They are unreachable once the contest is
+    // gone, so the delete continues rather than failing.
+    const snapshot = await getDocs(collection(db, CONTESTS, contestId, name)).catch(() => null);
+    if (!snapshot) continue;
     // Batches cap at 500 writes.
     for (let i = 0; i < snapshot.docs.length; i += 400) {
-      const batch = writeBatch(adminDb);
+      const batch = writeBatch(db);
       for (const document of snapshot.docs.slice(i, i + 400)) batch.delete(document.ref);
       await batch.commit();
     }
   }
-  await deleteDoc(doc(adminDb, CONTESTS, contestId));
+  await deleteDoc(doc(db, CONTESTS, contestId));
 }
 
 function writePoolChunks(
@@ -191,7 +195,7 @@ function writePoolChunks(
 ): void {
   for (let index = 0; index * CHUNK_SIZE < players.length; index += 1) {
     const slice = players.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
-    batch.set(doc(adminDb, CONTESTS, contestId, POOL, chunkId(index)), {
+    batch.set(doc(db, CONTESTS, contestId, POOL, chunkId(index)), {
       index,
       players: slice,
       updatedAt: new Date().toISOString(),
@@ -204,19 +208,19 @@ function writePoolChunks(
  * written, which keeps a 30-second polling loop inexpensive.
  */
 export async function writeLivePool(contestId: string, players: ContestPlayer[]): Promise<number> {
-  const existing = await getDocs(collection(adminDb, CONTESTS, contestId, POOL));
+  const existing = await getDocs(collection(db, CONTESTS, contestId, POOL));
   const previous = new Map<string, string>();
   for (const document of existing.docs) {
     previous.set(document.id, poolChunkSignature((document.data().players as ContestPlayer[]) ?? []));
   }
 
   let written = 0;
-  const batch = writeBatch(adminDb);
+  const batch = writeBatch(db);
   for (let index = 0; index * CHUNK_SIZE < players.length; index += 1) {
     const slice = players.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
     const id = chunkId(index);
     if (previous.get(id) === poolChunkSignature(slice)) continue;
-    batch.set(doc(adminDb, CONTESTS, contestId, POOL, id), {
+    batch.set(doc(db, CONTESTS, contestId, POOL, id), {
       index,
       players: slice,
       updatedAt: new Date().toISOString(),

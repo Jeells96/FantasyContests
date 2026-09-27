@@ -31,18 +31,7 @@ function PinGate() {
     try {
       await unlockAdmin(pin);
     } catch (e) {
-      const message = e instanceof Error ? e.message : '';
-      // Distinguish a wrong PIN from a project that is not set up, so a broken
-      // configuration is not reported as a typo.
-      setError(
-        /user-not-found|configuration-not-found|operation-not-allowed/i.test(message)
-          ? 'The admin account does not exist on this Firebase project yet — see the README "Admin bootstrap" section.'
-          : /network|unavailable|timeout|failed to fetch/i.test(message)
-            ? 'Cannot reach Firebase to verify the PIN. Check the connection and try again.'
-            : /too-many-requests/i.test(message)
-              ? 'Too many attempts. Wait a moment and try again.'
-              : 'Incorrect PIN.',
-      );
+      setError('Incorrect PIN.');
       setPin('');
     } finally {
       setBusy(false);

@@ -3,23 +3,20 @@
  *
  * Polls the sports feeds and writes raw + normalized fantasy points into each
  * running contest's player pool, so every connected browser updates through
- * Firestore without refreshing. It signs in as the same single admin account the
- * security rules recognise, which is why it is allowed to write live statistics
- * while ordinary users are not.
+ * Firestore without refreshing.
  *
- *   ADMIN_PIN=2325 npm run live-sync
- *   ADMIN_PIN=2325 npm run live-sync -- --contest=<id> --interval=30 --once
+ *   npm run live-sync
+ *   npm run live-sync -- --contest=<id> --interval=30 --once
  *
  * Behind an HTTP proxy, prefix with NODE_USE_ENV_PROXY=1 (Node >= 22.21) so
  * Node's fetch honours HTTPS_PROXY.
  */
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import {
   collection,
   doc,
   getDocs,
-  getFirestore,
+  initializeFirestore,
   updateDoc,
   writeBatch,
   type Firestore,
@@ -50,9 +47,6 @@ const config = {
   appId: process.env.FIREBASE_APP_ID ?? '1:1011539617993:web:b5e3dce1c1a43a7d634518',
 };
 
-const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@fantasycontests.app';
-const adminSalt = process.env.ADMIN_PW_SALT ?? 'fc-admin-v1';
-const adminPin = process.env.ADMIN_PIN;
 const onlyContest = arg('contest');
 const intervalSeconds = Number(arg('interval') ?? '30');
 const once = flag('once');
@@ -175,16 +169,10 @@ async function runOnce(db: Firestore): Promise<number> {
 }
 
 async function main(): Promise<void> {
-  if (!adminPin) {
-    console.error('Set ADMIN_PIN (the admin PIN) so the worker can sign in as the admin account.');
-    process.exit(1);
-  }
-
   const app = initializeApp(config);
-  const db = getFirestore(app);
-  const auth = getAuth(app);
-  await signInWithEmailAndPassword(auth, adminEmail, `${adminPin}::${adminSalt}`);
-  log(`Signed in as ${adminEmail} · project ${config.projectId}`);
+  // Player pools contain optional fields; Firestore rejects explicit undefined.
+  const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+  log(`Connected to project ${config.projectId}`);
 
   await runOnce(db);
   if (once) {

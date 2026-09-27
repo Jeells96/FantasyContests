@@ -45,38 +45,76 @@ npm install
 The Firebase web config is compiled in with the project's own defaults (`src/lib/firebase.ts`). To point at a
 different project, copy `.env.example` to `.env` and fill in the values.
 
-### 3. Enable the two sign-in methods
+**No Firebase Authentication is required.** Nothing needs enabling in the console beyond Firestore itself:
 
-In the Firebase console → **Authentication → Sign-in method**, enable:
+- a player is identified by a random id generated on their own device and kept in `localStorage`;
+- the admin area is unlocked by comparing the PIN (`2325`, override with `VITE_ADMIN_PIN`) in the browser.
 
-| Provider | Used for |
-| --- | --- |
-| **Anonymous** | every visitor; the anonymous account is what owns a user's entry |
-| **Email/Password** | the single admin account behind the PIN |
+### 3. Security rules
 
-### 4. Admin bootstrap
+Paste these into **Firestore → Rules** in the console, or run `npm run deploy:rules` (they are in
+`firestore.rules`):
 
-The admin PIN is not a client-side check: it unlocks one real Firebase Auth account, and the Firestore rules
-only trust that account. Create it once, in **Authentication → Users → Add user**:
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-- **Email:** `admin@fantasycontests.app`
-- **Password:** `2325::fc-admin-v1`
+    function contestLocked(contestId) {
+      let contest = get(/databases/$(database)/documents/contests/$(contestId)).data;
+      return contest.keys().hasAny(['lockAt']) && request.time >= contest.lockAt;
+    }
 
-The password is the PIN plus the salt from `VITE_ADMIN_PW_SALT` (`fc-admin-v1` by default), joined by `::`.
-To change the PIN, change this account's password to `<new-pin>::<salt>`. To use a different email or salt, set
-`VITE_ADMIN_EMAIL` / `VITE_ADMIN_PW_SALT` and update the email in `firestore.rules` to match.
+    match /contests/{contestId} {
+      allow read, write: if true;
+      match /pool/{chunkId} { allow read, write: if true; }
+      match /standings/{entryId} { allow read, write: if true; }
+      match /entries/{entryId} {
+        allow get: if true;
+        allow list: if contestLocked(contestId);
+        allow create, update: if !contestLocked(contestId);
+        allow delete: if true;
+      }
+    }
 
-### 5. Deploy the security rules
-
-The rules are what actually protect the data, so deploy them before using the app:
-
-```bash
-npx firebase login
-npx firebase use stocks-b13c5
-npm run deploy:rules
+    match /config/{document} { allow read, write: if true; }
+  }
+}
 ```
 
-### 6. Run it
+These are open rules — no login — but they still keep two contest guarantees that need no account:
+
+- **entries freeze at lock**, so a lineup cannot be edited once the first game starts;
+- **entries cannot be listed before lock**, so nobody can pull down the field's rosters and picks while the
+  contest is open. Reading a single entry requires already knowing its random device id.
+
+If you would rather have nothing at all in the way, this is the fully open equivalent:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+The app works under either. The only difference is that the fully open version lets anyone read every roster
+before lock, and lets a submitted lineup be changed after the games have started.
+
+### 4. What open rules mean
+
+Worth being clear about, since the trade-off was chosen deliberately: the Firebase web config ships inside the
+JavaScript bundle, as it must for the browser to connect. With open rules, anyone who reads it can read, write
+and delete this database directly with their own script. The admin PIN keeps the admin screens out of casual
+reach; it is not a server-side check, because there is no login for the server to check against.
+
+That is fine for a private contest among people you know. If the app is ever shared more widely, the way to
+close it is Firebase Authentication plus rules that key off `request.auth.uid`.
+
+### 5. Run it
 
 ```bash
 npm run dev      # development
@@ -88,16 +126,16 @@ npm run deploy   # build + deploy hosting, rules and indexes
 
 ## Live scoring
 
-Live statistics are admin-writable only, so something has to be signed in as the admin to publish them. Either:
+Something has to be running to poll the feeds and publish scores. Either:
 
 **From the browser** — Admin → a contest → *Live scoring* → *Start auto-sync*, and leave the tab open.
 
 **Headless** — no browser needed:
 
 ```bash
-ADMIN_PIN=2325 npm run live-sync                 # every contest that is live
-ADMIN_PIN=2325 npm run live-sync -- --contest=<id> --interval=20
-ADMIN_PIN=2325 npm run live-sync -- --once       # a single pass, then exit
+npm run live-sync                  # every contest that is live
+npm run live-sync -- --contest=<id> --interval=20
+npm run live-sync -- --once        # a single pass, then exit
 ```
 
 Both paths run the same code (`src/lib/engine/liveSync.ts`): poll the feeds, convert new statistics into raw
@@ -184,30 +222,34 @@ which would make scoring circular, and every entrant receives exactly the same p
 
 ## Security model
 
-`firestore.rules` enforces the following on the server, independent of the UI:
+This app runs without Firebase Authentication, by choice. What that means in practice:
 
 | Data | Read | Write |
 | --- | --- | --- |
-| Contest config, salaries, caps, scoring, normalization, live stats, results | public | admin only |
-| A user's lineup + game-winner picks | the owner, plus everyone **after lock** | the owner, **only before lock** |
-| Public entrant record (name only) | public | the owner, before lock |
+| Contests, pools, salaries, scoring, live stats, results | anyone | anyone |
+| Public entrant records (name only) | anyone | anyone |
+| Lineups + game-winner picks | one at a time, if you know its device id; the whole list only **after lock** | only **before lock** |
 
-- **Other users' rosters are unreadable before lock**, including by listing the collection — the leaderboard
-  falls back to the public entrant records, which contain no roster, no picks and no score.
-- **Entries become immutable at lock.** Writes are rejected by comparing `request.time` against the contest's
-  stored lock timestamp, which is the first game's start.
-- **No user-writable field contains a score.** Scores are recomputed from the admin-written player pool every
+What the rules still enforce, without any login:
+
+- **Entries are immutable once the contest locks.** Writes are rejected by comparing `request.time` against the
+  contest's stored lock timestamp, which is the first game's start.
+- **Rosters are not listable before lock.** The leaderboard falls back to the public entrant records, which
+  contain no roster, no picks and no score.
+
+What is *not* enforced, and should be understood:
+
+- **The admin PIN is a client-side check.** It gates the admin screens in the UI; it cannot stop someone
+  writing to Firestore directly.
+- **Anyone can write contest data.** Salaries, scoring, live statistics and results are all publicly writable.
+
+Two things are still true regardless, because they are properties of the scoring code rather than the rules:
+
+- **No score is ever read from a user-writable field.** Scores are recomputed from the stored player pool every
   time the leaderboard renders, so an entry cannot carry points of its own.
-- **Submitted lineups are re-validated when scored.** The rules check ownership, lock state, entry shape, that
-  a lineup is never longer than the roster, and the self-reported salary against the cap; `buildLeaderboard`
-  then re-checks every lineup against the stored salaries, the cap, duplicate players and any position
-  restrictions, and flags and demotes any entry that breaks them. A lineup crafted outside the UI therefore
-  gains nothing. A lineup that is merely *short* is legal and is scored normally.
-
-The PIN's only job is to sign in to the admin account. Anyone who learns the PIN is an admin — but nobody who
-doesn't have it can write admin data, whatever they do to the frontend.
-
----
+- **Submitted lineups are re-validated when scored.** `buildLeaderboard` re-checks every lineup against the
+  stored salaries, the cap, duplicate players and any position restrictions, and flags and demotes entries that
+  break them. A lineup that is merely *short* is legal and is scored normally.
 
 ## Project layout
 
@@ -252,8 +294,8 @@ tie-breaker rules to be layered in later without touching the scoring path.
 
 ## Known limitations
 
-- **Live scoring needs an admin session running** (browser tab or worker) — Firestore rules deliberately do not
-  let clients write statistics. A Cloud Function on the Blaze plan would be the natural next step.
+- **Live scoring needs something running** (an admin browser tab or the worker) to poll the feeds. A Cloud
+  Function on the Blaze plan would be the natural next step.
 - **Two-point conversions** are not in ESPN's live box score, so they score from season data only.
 - **NFL D/ST projections** are estimates from the game's implied point total plus league-average takeaway
   rates, not team-by-team defensive splits; blocked kicks are not detected live.

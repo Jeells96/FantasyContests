@@ -1,10 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { adminAuth, ensureAnonymousUser, onAuthStateChanged, signInAdmin, signOutAdmin } from '../lib/firebase';
-import { clearIdentity, loadIdentity, saveIdentity, type Identity } from '../lib/identity';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { ADMIN_PIN } from '../lib/firebase';
+import { clearIdentity, deviceId, loadIdentity, saveIdentity, type Identity } from '../lib/identity';
+
+const ADMIN_SESSION_KEY = 'fantasycontests.admin.v1';
 
 interface SessionValue {
-  /** Anonymous Firebase uid; owns this device's entries. */
-  uid: string | null;
+  /** Random per-device id; owns this device's entries. */
+  uid: string;
   identity: Identity | null;
   ready: boolean;
   error: string | null;
@@ -17,39 +19,26 @@ interface SessionValue {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
+/** Was the admin area already unlocked in this browser tab? */
+function readAdminSession(): boolean {
+  try {
+    return sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Session state without Firebase Authentication.
+ *
+ * A player is identified by a random id stored on their device, and the admin
+ * area is unlocked by comparing the PIN in the browser. There is nothing to
+ * sign in to, so the app is usable the moment Firestore is reachable.
+ */
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [uid, setUid] = useState<string | null>(null);
+  const [uid] = useState<string>(() => deviceId());
   const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity());
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    ensureAnonymousUser()
-      .then((user) => {
-        if (cancelled) return;
-        setUid(user.uid);
-        setReady(true);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        const message = e instanceof Error ? e.message : '';
-        setError(
-          /configuration-not-found|operation-not-allowed/i.test(message)
-            ? 'Anonymous sign-in is not enabled for this Firebase project, so lineups cannot be submitted yet. Enable Authentication → Anonymous in the Firebase console (see README step 3).'
-            : /network|unavailable|timeout/i.test(message)
-              ? 'Cannot reach Firebase right now. Contests may be out of date.'
-              : 'Could not start a player session, so lineups cannot be submitted yet.',
-        );
-        setReady(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => onAuthStateChanged(adminAuth, (user) => setIsAdmin(Boolean(user))), []);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => readAdminSession());
 
   const saveName = useCallback((firstName: string, lastName: string) => {
     setIdentity(saveIdentity(firstName, lastName));
@@ -61,16 +50,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const unlockAdmin = useCallback(async (pin: string) => {
-    await signInAdmin(pin);
+    if (pin !== ADMIN_PIN) throw new Error('incorrect-pin');
+    try {
+      // Scoped to the tab, so closing it ends the admin session.
+      sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
+    } catch {
+      // Storage blocked: the unlock simply does not survive a reload.
+    }
+    setIsAdmin(true);
   }, []);
 
   const lockAdmin = useCallback(async () => {
-    await signOutAdmin();
+    try {
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+    setIsAdmin(false);
   }, []);
 
   const value = useMemo<SessionValue>(
-    () => ({ uid, identity, ready, error, saveName, forgetName, isAdmin, unlockAdmin, lockAdmin }),
-    [uid, identity, ready, error, saveName, forgetName, isAdmin, unlockAdmin, lockAdmin],
+    () => ({
+      uid,
+      identity,
+      ready: true,
+      error: null,
+      saveName,
+      forgetName,
+      isAdmin,
+      unlockAdmin,
+      lockAdmin,
+    }),
+    [uid, identity, saveName, forgetName, isAdmin, unlockAdmin, lockAdmin],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

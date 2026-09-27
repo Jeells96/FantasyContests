@@ -25,7 +25,7 @@ type SortKey = 'salary' | 'projection' | 'points';
 
 export function ContestPage() {
   const { contestId } = useParams<{ contestId: string }>();
-  const { uid, identity, error: sessionError } = useSession();
+  const { uid, identity } = useSession();
   const data = useContestData(contestId, uid);
   const { contest, players, playersById, standings, entries, myEntry, locked, status } = data;
 
@@ -229,7 +229,6 @@ export function ContestPage() {
         </div>
 
         {message ? <Banner tone={message.tone === 'ok' ? 'ok' : 'bad'}>{message.text}</Banner> : null}
-        {!locked && !uid && sessionError ? <Banner tone="warn">{sessionError}</Banner> : null}
 
         {tab === 'lineup' ? (
           locked ? (
@@ -381,7 +380,7 @@ export function ContestPage() {
             <button
               type="button"
               className="btn btn--go"
-              disabled={!validation?.valid || saving || !identity || !uid}
+              disabled={!validation?.valid || saving || !identity}
               onClick={submit}
             >
               {saving ? <span className="spinner" /> : myEntry ? 'Update' : 'Submit'}

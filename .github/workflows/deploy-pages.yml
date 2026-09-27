@@ -58,5 +58,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # While the repository's Pages source is "Deploy from a branch", GitHub
+      # also runs its own "pages build and deployment" on every push to main,
+      # which publishes the repository root — the unbuilt source — over this
+      # build. Waiting lets that finish so the built site is what ends up live.
+      #
+      # Setting Pages → Source to "GitHub Actions" stops that second build
+      # entirely, at which point this step can be deleted.
+      - name: Let the branch-based Pages build finish first
+        run: sleep 90
+
       - id: deployment
         uses: actions/deploy-pages@v4

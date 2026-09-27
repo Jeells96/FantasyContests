@@ -7,6 +7,7 @@ import type {
   Standing,
 } from '../../types';
 import { validateLineup } from './lineup';
+import { captainEnabled, captainFirst, captainMultiplier, effectivePoints, effectiveSalary } from './captain';
 import { round2 } from './projections';
 
 export interface LeaderboardInput {
@@ -32,6 +33,8 @@ export interface LeaderboardInput {
 export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
   const { contest, standings, entries, players, selfUid, locked } = input;
   const entriesByUid = new Map(entries.map((entry) => [entry.uid, entry]));
+  const hasCaptain = captainEnabled(contest);
+  const multiplier = captainMultiplier(contest);
   const slotById = new Map(contest.rosterSlots.map((slot) => [slot.id, slot]));
 
   const uids = new Set<string>([...standings.map((s) => s.uid), ...entriesByUid.keys()]);
@@ -50,7 +53,10 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
     let salaryUsed = entry?.salaryUsed ?? 0;
 
     if (entry) {
-      const validation = validateLineup(entry.lineup, players, contest.rosterSlots, contest.salaryCapInfo.cap);
+      const validation = validateLineup(entry.lineup, players, contest.rosterSlots, contest.salaryCapInfo.cap, {
+        enabled: hasCaptain,
+        multiplier,
+      });
       violations = validation.errors;
       salaryUsed = validation.salaryUsed;
 
@@ -58,12 +64,23 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
       for (const slot of contest.rosterSlots) {
         const selection = entry.lineup.find((line) => line.slotId === slot.id);
         const player = selection ? players.get(selection.playerId) ?? null : null;
+        const isCaptain = hasCaptain && Boolean(selection?.captain);
         const raw = player?.rawPoints ?? 0;
-        const normalized = player?.normalizedPoints ?? 0;
+        // The captain's multiplier applies to the contest score, the same
+        // number the leaderboard ranks on.
+        const normalized = effectivePoints(player?.normalizedPoints ?? 0, isCaptain, multiplier);
         fantasyPoints += normalized;
-        built.push({ slot: slotById.get(slot.id) ?? slot, player, rawPoints: raw, normalizedPoints: normalized });
+        built.push({
+          slot: slotById.get(slot.id) ?? slot,
+          player,
+          rawPoints: raw,
+          normalizedPoints: normalized,
+          isCaptain,
+          salary: player ? effectiveSalary(player.salary, isCaptain, multiplier) : 0,
+        });
       }
-      if (canSeeRoster) lines = built;
+      // The captain leads the roster wherever it is shown.
+      if (canSeeRoster) lines = captainFirst(built);
     }
 
     const { correct, decided, total } = scorePicks(contest, entry);
@@ -72,6 +89,7 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
     rows.push({
       uid,
       displayName,
+      teamName: entry?.teamName ?? standings.find((s) => s.uid === uid)?.teamName,
       rank: 0,
       fantasyPoints: round2(fantasyPoints),
       bonusPoints,
@@ -130,6 +148,7 @@ export function toResults(rows: LeaderboardRow[]): Contest['results'] {
   return rows.map((row) => ({
     uid: row.uid,
     displayName: row.displayName,
+    teamName: row.teamName,
     rank: row.rank,
     fantasyPoints: row.fantasyPoints,
     bonusPoints: row.bonusPoints,

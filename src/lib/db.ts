@@ -62,6 +62,8 @@ function contestFromDoc(id: string, data: DocumentData): Contest {
     },
     scoringBaseline: data.scoringBaseline ?? 0,
     gameWinner: data.gameWinner ?? { enabled: false, bonusPercent: 0, bonusPoints: 0 },
+    // Absent on contests created before captains existed, which means disabled.
+    captain: data.captain ?? undefined,
     lockTime: data.lockTime ?? '',
     lastGameStart: data.lastGameStart ?? '',
     status: data.status ?? 'open',
@@ -264,6 +266,7 @@ export interface SaveEntryInput {
   contestId: string;
   uid: string;
   displayName: string;
+  teamName?: string;
   lineup: LineupSelection[];
   picks: Record<string, string>;
   salaryUsed: number;
@@ -279,6 +282,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<void> {
   const entry: Entry = {
     uid: input.uid,
     displayName: input.displayName,
+    teamName: input.teamName,
     lineup: input.lineup,
     picks: input.picks,
     salaryUsed: input.salaryUsed,
@@ -290,6 +294,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<void> {
   const standing: Standing = {
     uid: input.uid,
     displayName: input.displayName,
+    teamName: input.teamName,
     enteredAt: entry.submittedAt,
     submitted: true,
   };

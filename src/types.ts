@@ -144,6 +144,17 @@ export interface NormalizationInfo {
   computedAt: string;
 }
 
+/**
+ * Team captain. One rostered player can be designated captain: they cost more
+ * and score more, by the same multiplier, so the choice is a real trade-off
+ * rather than free upside.
+ */
+export interface CaptainConfig {
+  enabled: boolean;
+  /** Applied to both the captain's salary and their fantasy points. */
+  multiplier: number;
+}
+
 export interface GameWinnerConfig {
   enabled: boolean;
   /** Percentage of the contest scoring baseline awarded per correct pick. */
@@ -173,6 +184,7 @@ export type ContestStatus = 'open' | 'live' | 'complete';
 export interface ContestResultsEntry {
   uid: string;
   displayName: string;
+  teamName?: string;
   rank: number;
   fantasyPoints: number;
   bonusPoints: number;
@@ -193,6 +205,8 @@ export interface Contest {
   /** Expected normalized score of a median lineup; the bonus baseline. */
   scoringBaseline: number;
   gameWinner: GameWinnerConfig;
+  /** Absent on contests created before captains existed, which means disabled. */
+  captain?: CaptainConfig;
   /** Earliest game start; the moment the whole contest locks. */
   lockTime: string;
   /** Latest game start (+ slack) used to help decide completion. */
@@ -213,11 +227,15 @@ export interface Contest {
 export interface LineupSelection {
   slotId: string;
   playerId: string;
+  /** Exactly one selection may carry this when the contest has captains. */
+  captain?: boolean;
 }
 
 export interface Entry {
   uid: string;
   displayName: string;
+  /** Auto-generated alliterative team name. */
+  teamName?: string;
   lineup: LineupSelection[];
   /** gameId -> picked team id. */
   picks: Record<string, string>;
@@ -232,6 +250,7 @@ export interface Entry {
 export interface Standing {
   uid: string;
   displayName: string;
+  teamName?: string;
   enteredAt: string;
   submitted: boolean;
 }
@@ -240,12 +259,17 @@ export interface LeaderboardPlayerLine {
   slot: RosterSlot;
   player: ContestPlayer | null;
   rawPoints: number;
+  /** Already multiplied when this line is the captain. */
   normalizedPoints: number;
+  isCaptain: boolean;
+  /** Salary actually charged, including the captain premium. */
+  salary: number;
 }
 
 export interface LeaderboardRow {
   uid: string;
   displayName: string;
+  teamName?: string;
   rank: number;
   fantasyPoints: number;
   bonusPoints: number;

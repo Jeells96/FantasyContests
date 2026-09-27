@@ -17,6 +17,11 @@ statistical events.
 - Build one lineup per contest against an automatically calculated salary cap, with player cards showing
   headshots, position, team, opponent, salary, season stats, projections and live points.
 - Roster spots are interchangeable — any player fits any spot — and every spot must be filled to submit.
+- One player can be named **team captain**: they score 1.5× points and cost 1.5× salary. Tap a player to add
+  them, tap again to make them captain, tap a third time to drop them. The captain leads the roster wherever
+  it is displayed, and the salary cap is calculated with the premium included.
+- Finishing an entry names the team: an alliterative, G-rated name built from the first name — "Jaren's
+  Jumping Jackrabbits" — with 196 combinations per letter and a shuffle button.
 - Tapping a player adds them; tapping them again takes them back out. A player you cannot afford is refused
   with the amount you have left, rather than being added and rejected at submission. When a lineup is not
   submittable yet, the footer says exactly what is missing.
@@ -217,6 +222,13 @@ Contests default to interchangeable spots (9 for NFL, 11 for MLB, 8 for NBA, 9 f
 makes a cross-sport contest straightforward — there is no NFL FLEX to reconcile with an MLB outfielder. The
 engine still enforces whatever a spot lists, so an admin can load a traditional positional preset, restrict one
 spot to `RB, WR, TE`, or pin a spot to a single sport.
+
+### Team captain (`src/lib/engine/captain.ts`)
+Exactly one rostered player may be captain, scoring and costing `multiplier`× (1.5 by default, configurable per
+contest). Because the premium is real cap space, the salary cap and the scoring baseline are both computed with
+it: the cheapest measured lineup captains its cheapest player, every other measured lineup captains its most
+expensive, and the baseline adds the bonus on its strongest projection. Contests created before captains
+existed have no `captain` field, which reads as disabled.
 
 ### Game-winner bonus
 The bonus is a percentage of a **contest scoring baseline** frozen when the contest is created: the expected

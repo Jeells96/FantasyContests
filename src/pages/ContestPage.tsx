@@ -16,6 +16,8 @@ import { buildLeaderboard } from '../lib/engine/leaderboard';
 import { formatMoney, validateEntry } from '../lib/engine/lineup';
 import { isEligible, rosterSummary } from '../lib/engine/roster';
 import { markEntered, teamNameFor } from '../lib/identity';
+import { generateTeamName } from '../lib/teamName';
+import { captainEnabled, captainMultiplier, captainPremium } from '../lib/engine/captain';
 import { statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
 import { SPORT_LABELS, type ContestPlayer, type LineupSelection, type Sport } from '../types';
@@ -40,6 +42,7 @@ export function ContestPage() {
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [teamName, setTeamName] = useState<string>('');
   const picksRef = useRef<HTMLDivElement | null>(null);
 
   // Adopt the saved entry once, then let local edits stand.
@@ -47,6 +50,7 @@ export function ContestPage() {
     if (hydrated || !myEntry) return;
     setLineup(myEntry.lineup ?? []);
     setPicks(myEntry.picks ?? {});
+    if (myEntry.teamName) setTeamName(myEntry.teamName);
     setHydrated(true);
   }, [myEntry, hydrated]);
 
@@ -55,6 +59,7 @@ export function ContestPage() {
     if (locked) setSortKey('points');
   }, [locked]);
 
+
   const myPlayerIds = useMemo(
     () => new Set((myEntry?.lineup ?? lineup).map((line) => line.playerId)),
     [myEntry, lineup],
@@ -62,10 +67,19 @@ export function ContestPage() {
   const { events } = useScoringEvents(contest, players, myPlayerIds, locked && status !== 'complete');
 
   const cap = contest?.salaryCapInfo.cap ?? 0;
+  const hasCaptain = captainEnabled(contest);
+  const capMultiplier = captainMultiplier(contest);
+  const captainPlayerId = lineup.find((line) => line.captain)?.playerId ?? null;
   const validation = useMemo(() => {
     if (!contest) return null;
     return validateEntry(contest, lineup, picks, playersById);
   }, [contest, lineup, picks, playersById]);
+
+  // Once the entry is complete, name the team.
+  useEffect(() => {
+    if (locked || teamName || !identity || !validation?.valid) return;
+    setTeamName(generateTeamName(identity.firstName));
+  }, [locked, teamName, identity, validation?.valid]);
 
   const leaderboard = useMemo(() => {
     if (!contest) return [];
@@ -128,13 +142,20 @@ export function ContestPage() {
 
   const usedPlayerIds = new Set(lineup.map((line) => line.playerId));
 
+  /**
+   * One control, three states: tap to roster a player, tap again to make them
+   * captain, tap a third time to drop them.
+   */
   function assignPlayer(player: ContestPlayer) {
     if (!contest || locked) return;
     setMessage(null);
 
-    // Selecting a player who is already rostered takes them back out, so the
-    // same tap both adds and removes.
-    if (lineup.some((line) => line.playerId === player.id)) {
+    const existing = lineup.find((line) => line.playerId === player.id);
+    if (existing) {
+      if (hasCaptain && !existing.captain) {
+        promoteToCaptain(existing.slotId, player);
+        return;
+      }
       setLineup((current) => current.filter((line) => line.playerId !== player.id));
       return;
     }
@@ -152,7 +173,10 @@ export function ContestPage() {
 
     // Whoever holds the target spot is refunded before the cap is checked.
     const replaced = lineup.find((line) => line.slotId === target.id);
-    const refund = replaced ? playersById.get(replaced.playerId)?.salary ?? 0 : 0;
+    const replacedPlayer = replaced ? playersById.get(replaced.playerId) : undefined;
+    const refund = replacedPlayer
+      ? replacedPlayer.salary + (replaced?.captain ? captainPremium(replacedPlayer, capMultiplier) : 0)
+      : 0;
     const available = cap - salaryUsed + refund;
     if (player.salary > available) {
       setMessage({
@@ -169,6 +193,39 @@ export function ContestPage() {
       { slotId: target.id, playerId: player.id },
     ]);
     setActiveSlotId(null);
+  }
+
+  /** Promoting costs the difference between the two captains' premiums. */
+  function promoteToCaptain(slotId: string, player: ContestPlayer) {
+    if (!contest || locked || !hasCaptain) return;
+    const currentCaptain = lineup.find((line) => line.captain);
+    const currentPlayer = currentCaptain ? playersById.get(currentCaptain.playerId) : undefined;
+    const released = currentPlayer ? captainPremium(currentPlayer, capMultiplier) : 0;
+    const cost = captainPremium(player, capMultiplier) - released;
+
+    if (cost > cap - salaryUsed) {
+      setMessage({
+        tone: 'bad',
+        text: `Making ${player.name} captain costs another ${formatMoney(
+          cost,
+        )} and you have ${formatMoney(cap - salaryUsed)} left. Drop someone first.`,
+      });
+      return;
+    }
+
+    setMessage(null);
+    setLineup((current) => current.map((line) => ({ ...line, captain: line.slotId === slotId })));
+  }
+
+  function toggleCaptainSlot(slotId: string) {
+    const line = lineup.find((entry) => entry.slotId === slotId);
+    const player = line ? playersById.get(line.playerId) : undefined;
+    if (!line || !player) return;
+    if (line.captain) {
+      setLineup((current) => current.map((entry) => ({ ...entry, captain: false })));
+      return;
+    }
+    promoteToCaptain(slotId, player);
   }
 
   function removeSlot(slotId: string) {
@@ -191,6 +248,7 @@ export function ContestPage() {
         lineup,
         picks,
         salaryUsed: validation.salaryUsed,
+        teamName: teamName || undefined,
         lockedSnapshot: Object.fromEntries(
           lineup.map((line) => [
             line.playerId,
@@ -278,6 +336,28 @@ export function ContestPage() {
           ) : (
             <div className="grid grid--builder">
               <div className="stack">
+                <HowItWorks
+                  contest={contest}
+                  hasCaptain={hasCaptain}
+                  multiplier={capMultiplier}
+                />
+
+                {teamName ? (
+                  <div className="card card--tight teamname">
+                    <div>
+                      <div className="eyebrow">Your team name</div>
+                      <div className="teamname__value">{teamName}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--ghost"
+                      onClick={() => identity && setTeamName(generateTeamName(identity.firstName))}
+                    >
+                      Shuffle
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="card card--tight">
                   <div className="row row--between" style={{ marginBottom: 8 }}>
                     <div className="eyebrow">Player pool · {visiblePlayers.length}</div>
@@ -331,6 +411,8 @@ export function ContestPage() {
                       selected={usedPlayerIds.has(player.id)}
                       used={usedPlayerIds.has(player.id)}
                       unaffordable={player.salary > spendable}
+                      captain={hasCaptain && player.id === captainPlayerId}
+                      captainMultiplier={capMultiplier}
                       onClick={() => assignPlayer(player)}
                       onInfo={() => setDetail(player)}
                     />
@@ -356,6 +438,8 @@ export function ContestPage() {
                     activeSlotId={activeSlotId}
                     onSelectSlot={(slotId) => setActiveSlotId(activeSlotId === slotId ? null : slotId)}
                     onRemove={removeSlot}
+                    onToggleCaptain={hasCaptain ? toggleCaptainSlot : undefined}
+                    captainMultiplier={hasCaptain ? capMultiplier : null}
                   />
                 </div>
 
@@ -500,7 +584,14 @@ function LockedLineup({
           <h2 style={{ fontSize: 15 }}>Locked roster</h2>
           <span className="tiny faint">live points</span>
         </div>
-        <RosterPanel slots={contest.rosterSlots} lineup={lineup} playersById={playersById} live readOnly />
+        <RosterPanel
+          slots={contest.rosterSlots}
+          lineup={lineup}
+          playersById={playersById}
+          captainMultiplier={captainEnabled(contest) ? captainMultiplier(contest) : null}
+          live
+          readOnly
+        />
       </div>
 
       {contest.gameWinner.enabled ? (
@@ -633,6 +724,59 @@ function ContestInfo({ contest }: { contest: import('../types').Contest }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** The contest's rules, stated before anyone starts picking. */
+function HowItWorks({
+  contest,
+  hasCaptain,
+  multiplier,
+}: {
+  contest: import('../types').Contest;
+  hasCaptain: boolean;
+  multiplier: number;
+}) {
+  return (
+    <div className="card card--tight howto">
+      <div className="eyebrow" style={{ marginBottom: 8 }}>
+        How this contest works
+      </div>
+      <ul className="howto__list">
+        <li>
+          <strong>Tap a player</strong> to add them to your roster.
+          {hasCaptain ? (
+            <>
+              {' '}
+              <strong>Tap again</strong> to make them your <span className="cpt-badge">CPT</span>.{' '}
+              <strong>Tap a third time</strong> to drop them.
+            </>
+          ) : (
+            <> Tap them again to drop them.</>
+          )}
+        </li>
+        {hasCaptain ? (
+          <li>
+            Your <strong>captain scores {multiplier}× points</strong> — and costs{' '}
+            <strong>{multiplier}× salary</strong>. Exactly one captain per roster, shown at the top of your
+            lineup.
+          </li>
+        ) : null}
+        <li>
+          Fill all <strong>{contest.rosterSlots.length} spots</strong> without going over the{' '}
+          <strong>{formatMoney(contest.salaryCapInfo.cap)}</strong> salary cap.
+        </li>
+        {contest.gameWinner.enabled ? (
+          <li>
+            Pick a winner in every game. Each correct pick adds{' '}
+            <strong>+{contest.gameWinner.bonusPoints.toFixed(1)}</strong> — the same for everyone.
+          </li>
+        ) : null}
+        <li>
+          Everything locks when the first game starts. Until then, nobody can see your roster.
+        </li>
+      </ul>
     </div>
   );
 }

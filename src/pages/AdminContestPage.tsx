@@ -14,6 +14,7 @@ import {
   openRoster,
 } from '../lib/engine/roster';
 import { cloneScoring, DEFAULT_SCORING, defaultScoringFor } from '../lib/scoring';
+import { DEFAULT_CAPTAIN_MULTIPLIER } from '../lib/engine/captain';
 import { STATS_BY_SPORT, statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
 import {
@@ -70,6 +71,8 @@ export function AdminContestPage() {
   const [rosterSlots, setRosterSlots] = useState<RosterSlot[]>(buildDefaultRoster(['nfl']));
   const [scoring, setScoring] = useState<ContestScoring>(defaultScoringFor(['nfl']));
   const [gameWinnerEnabled, setGameWinnerEnabled] = useState(true);
+  const [captainOn, setCaptainOn] = useState(true);
+  const [captainX, setCaptainX] = useState(DEFAULT_CAPTAIN_MULTIPLIER);
   const [bonusPercent, setBonusPercent] = useState(5);
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
@@ -103,6 +106,8 @@ export function AdminContestPage() {
         setScoring(contest.scoring);
         setGameWinnerEnabled(contest.gameWinner.enabled);
         setBonusPercent(contest.gameWinner.bonusPercent);
+        setCaptainOn(Boolean(contest.captain?.enabled));
+        setCaptainX(contest.captain?.multiplier ?? DEFAULT_CAPTAIN_MULTIPLIER);
         setName(contest.name);
         setNotes(contest.notes ?? '');
         setDate(contest.lockTime.slice(0, 10));
@@ -175,11 +180,14 @@ export function AdminContestPage() {
   const pricing: PricingResult | null = useMemo(() => {
     if (pool.length === 0 || rosterSlots.length === 0) return null;
     try {
-      return priceContest(pool, rosterSlots, scoring, selectedGames);
+      return priceContest(pool, rosterSlots, scoring, selectedGames, {
+        enabled: captainOn,
+        multiplier: captainX,
+      });
     } catch {
       return null;
     }
-  }, [pool, rosterSlots, scoring, selectedGames]);
+  }, [pool, rosterSlots, scoring, selectedGames, captainOn, captainX]);
 
   const bonusPoints = pricing ? gameWinnerBonusPoints(pricing.scoringBaseline, bonusPercent) : 0;
 
@@ -203,6 +211,7 @@ export function AdminContestPage() {
           bonusPercent,
           bonusPoints,
         },
+        captain: { enabled: captainOn, multiplier: captainX },
         lockTime: earliestStart(games),
         lastGameStart: latestStart(games),
         status: 'open' as const,
@@ -456,6 +465,36 @@ export function AdminContestPage() {
             <RosterEditor slots={rosterSlots} sports={sports} onChange={setRosterSlots} />
 
             <ScoringEditor scoring={scoring} onChange={setScoring} />
+
+            <div className="card">
+              <div className="section-title">
+                <h2 style={{ fontSize: 15 }}>Team captain</h2>
+              </div>
+              <Toggle
+                checked={captainOn}
+                onChange={setCaptainOn}
+                label="Let entrants name one captain"
+              />
+              {captainOn ? (
+                <div className="field" style={{ marginTop: 12 }}>
+                  <label htmlFor="captainx">Captain multiplier (salary and points)</label>
+                  <input
+                    id="captainx"
+                    type="number"
+                    className="input input--num"
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    value={captainX}
+                    onChange={(event) => setCaptainX(Number(event.target.value) || DEFAULT_CAPTAIN_MULTIPLIER)}
+                  />
+                  <p className="tiny faint" style={{ margin: '6px 0 0' }}>
+                    The captain scores {captainX}× points and costs {captainX}× salary. The salary cap below
+                    already accounts for it.
+                  </p>
+                </div>
+              ) : null}
+            </div>
 
             <div className="card">
               <div className="section-title">

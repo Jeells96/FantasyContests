@@ -13,6 +13,8 @@ export function RosterPanel({
   activeSlotId,
   onSelectSlot,
   onRemove,
+  onToggleCaptain,
+  captainMultiplier,
   live,
   readOnly,
 }: {
@@ -22,19 +24,29 @@ export function RosterPanel({
   activeSlotId?: string | null;
   onSelectSlot?: (slotId: string) => void;
   onRemove?: (slotId: string) => void;
+  onToggleCaptain?: (slotId: string) => void;
+  /** Set when the contest has captains, which also enables the CPT control. */
+  captainMultiplier?: number | null;
   live?: boolean;
   readOnly?: boolean;
 }) {
   const bySlot = new Map(lineup.map((line) => [line.slotId, line.playerId]));
+  const captainSlotId = lineup.find((line) => line.captain)?.slotId ?? null;
+  // The captain always leads the roster, wherever the roster is shown.
+  const ordered = [...slots].sort(
+    (a, b) => Number(b.id === captainSlotId) - Number(a.id === captainSlotId),
+  );
 
   return (
     <div className="list">
-      {slots.map((slot) => {
+      {ordered.map((slot) => {
+        const isCaptain = slot.id === captainSlotId;
         const playerId = bySlot.get(slot.id);
         const player = playerId ? playersById.get(playerId) : undefined;
         const classes = [
           'slot',
           player ? 'slot--filled' : '',
+          isCaptain ? 'slot--captain' : '',
           activeSlotId === slot.id ? 'slot--active' : '',
         ]
           .filter(Boolean)
@@ -50,7 +62,7 @@ export function RosterPanel({
               disabled={readOnly}
             >
               <span className="slot__tag">
-                {slot.label}
+                {isCaptain ? <span className="cpt-badge">CPT</span> : slot.label}
                 {slot.sport ? <div className="tiny faint">{slot.sport.toUpperCase()}</div> : null}
               </span>
 
@@ -78,10 +90,31 @@ export function RosterPanel({
             {player ? (
               <div className="player__right">
                 {live ? (
-                  <span className="player__points">{(player.normalizedPoints ?? 0).toFixed(1)}</span>
+                  <span className="player__points">
+                    {(
+                      (player.normalizedPoints ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
+                    ).toFixed(1)}
+                  </span>
                 ) : (
-                  <span className="player__salary">{formatMoney(player.salary)}</span>
+                  <span className={`player__salary${isCaptain ? ' player__salary--captain' : ''}`}>
+                    {formatMoney(
+                      isCaptain ? Math.round(player.salary * (captainMultiplier ?? 1)) : player.salary,
+                    )}
+                  </span>
                 )}
+                {!readOnly && captainMultiplier && onToggleCaptain ? (
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--ghost"
+                    style={{ minHeight: 20, padding: '0 4px' }}
+                    onClick={() => onToggleCaptain(slot.id)}
+                    aria-label={isCaptain ? `Remove captain from ${player.name}` : `Make ${player.name} captain`}
+                  >
+                    <span className={`tiny ${isCaptain ? 'cpt-text' : 'faint'}`}>
+                      {isCaptain ? 'captain' : 'make captain'}
+                    </span>
+                  </button>
+                ) : null}
                 {!readOnly && onRemove ? (
                   <button
                     type="button"

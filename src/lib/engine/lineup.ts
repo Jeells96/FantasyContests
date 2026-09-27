@@ -1,12 +1,20 @@
 import type { Contest, ContestGame, ContestPlayer, LineupSelection, RosterSlot } from '../../types';
 import { isEligible } from './roster';
+import { captainEnabled, captainMultiplier, effectiveSalary } from './captain';
 
 export interface LineupValidation {
   valid: boolean;
   errors: string[];
+  /** Includes the captain premium. */
   salaryUsed: number;
   filledSlots: number;
   totalSlots: number;
+  captainPlayerId: string | null;
+}
+
+export interface CaptainRules {
+  enabled: boolean;
+  multiplier: number;
 }
 
 /**
@@ -24,8 +32,11 @@ export function validateLineup(
   playersById: Map<string, ContestPlayer>,
   slots: RosterSlot[],
   salaryCap: number,
+  captain: CaptainRules = { enabled: false, multiplier: 1 },
 ): LineupValidation {
   const errors: string[] = [];
+  let captainPlayerId: string | null = null;
+  let captainCount = 0;
   const slotById = new Map(slots.map((slot) => [slot.id, slot]));
   const seenSlots = new Set<string>();
   const seenPlayers = new Set<string>();
@@ -59,12 +70,22 @@ export function validateLineup(
       errors.push(`${player.name} (${player.position}) is not eligible for ${slot.label}`);
       continue;
     }
-    salaryUsed += player.salary;
+    const isCaptain = Boolean(selection.captain) && captain.enabled;
+    if (isCaptain) {
+      captainCount += 1;
+      captainPlayerId = player.id;
+    }
+    salaryUsed += effectiveSalary(player.salary, isCaptain, captain.multiplier);
     filledSlots += 1;
   }
 
   for (const slot of slots) {
     if (!seenSlots.has(slot.id)) errors.push(`${slot.label} is empty`);
+  }
+
+  if (captain.enabled) {
+    if (captainCount > 1) errors.push('Only one player can be captain');
+    else if (captainCount === 0 && filledSlots > 0) errors.push('Pick a team captain');
   }
 
   if (salaryCap > 0 && salaryUsed > salaryCap) {
@@ -77,6 +98,7 @@ export function validateLineup(
     salaryUsed,
     filledSlots,
     totalSlots: slots.length,
+    captainPlayerId,
   };
 }
 
@@ -102,7 +124,10 @@ export function validateEntry(
   picks: Record<string, string>,
   playersById: Map<string, ContestPlayer>,
 ): LineupValidation {
-  const lineup = validateLineup(selections, playersById, contest.rosterSlots, contest.salaryCapInfo.cap);
+  const lineup = validateLineup(selections, playersById, contest.rosterSlots, contest.salaryCapInfo.cap, {
+    enabled: captainEnabled(contest),
+    multiplier: captainMultiplier(contest),
+  });
   const pickErrors = contest.gameWinner.enabled ? validatePicks(picks, contest.games) : [];
   return {
     ...lineup,

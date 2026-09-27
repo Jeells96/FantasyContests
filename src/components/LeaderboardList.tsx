@@ -43,9 +43,10 @@ export function LeaderboardList({
               <span className="lb-rank">{row.rank}</span>
               <span style={{ minWidth: 0 }}>
                 <span className="lb-name">
-                  {row.displayName}
+                  {row.teamName ?? row.displayName}
                   {row.isSelf ? <span className="tiny muted"> · you</span> : null}
                 </span>
+                {row.teamName ? <span className="lb-sub">{row.displayName}</span> : null}
                 <span className="lb-sub">
                   {row.fantasyPoints.toFixed(1)} pts
                   {contest.gameWinner.enabled ? (
@@ -75,7 +76,7 @@ export function LeaderboardList({
                     {row.lines.map((line) => (
                       <div className="lb-line" key={line.slot.id}>
                         <span className="faint" style={{ fontWeight: 700 }}>
-                          {line.slot.label}
+                          {line.isCaptain ? <span className="cpt-badge">CPT</span> : line.slot.label}
                         </span>
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {line.player ? (
@@ -93,7 +94,7 @@ export function LeaderboardList({
                             <span className="faint">empty</span>
                           )}
                         </span>
-                        <span className="num faint">{line.player ? formatMoney(line.player.salary) : ''}</span>
+                        <span className="num faint">{line.player ? formatMoney(line.salary) : ''}</span>
                         <span className="num" style={{ fontWeight: 800, minWidth: 54, textAlign: 'right' }}>
                           {line.normalizedPoints.toFixed(1)}
                           {line.player && line.player.sport !== 'nfl' ? (

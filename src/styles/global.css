@@ -1201,3 +1201,76 @@ h4 {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ------------------------------------------------------------- captain ----- */
+.cpt-badge {
+  display: inline-grid;
+  place-items: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: linear-gradient(140deg, #fbbf24, #f59e0b);
+  color: #2a1a00;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
+.player__name .cpt-badge {
+  margin-right: 5px;
+}
+
+.cpt-text {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.player--captain {
+  border-color: rgba(251, 191, 36, 0.6);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.14), rgba(15, 21, 38, 0.6) 60%);
+}
+
+.slot--captain {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.1), var(--bg-elev-2) 60%);
+}
+
+.player__salary--captain {
+  color: var(--warn);
+}
+
+/* --------------------------------------------------------- how it works ---- */
+.howto {
+  border-color: rgba(91, 140, 255, 0.35);
+  background: linear-gradient(180deg, rgba(91, 140, 255, 0.1), rgba(15, 21, 38, 0.6));
+}
+
+.howto__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.howto__list strong {
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------- team name ----- */
+.teamname {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-color: rgba(74, 222, 128, 0.4);
+  background: linear-gradient(180deg, rgba(74, 222, 128, 0.1), rgba(15, 21, 38, 0.6));
+}
+
+.teamname__value {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}

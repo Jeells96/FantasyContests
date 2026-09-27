@@ -12,6 +12,8 @@ import type { PoolPlayer } from '../providers/types';
 import { computeNormalization } from './normalization';
 import { isEligible, positionDemand, slotsByScarcity } from './roster';
 import { median, projectRawPoints, round2, shrinkProjection, topMean } from './projections';
+import { effectiveSalary } from './captain';
+import type { CaptainRules } from './lineup';
 
 /**
  * Automatic pricing: projections -> cross-sport normalization -> salaries ->
@@ -69,11 +71,14 @@ interface Priced {
  * `games` is only used to attach opponent/gameId context that is already on the
  * pool players; it is accepted so callers cannot forget to keep them in sync.
  */
+const NO_CAPTAIN: CaptainRules = { enabled: false, multiplier: 1 };
+
 export function priceContest(
   pool: PoolPlayer[],
   slots: RosterSlot[],
   scoring: ContestScoring,
   games: ContestGame[],
+  captain: CaptainRules = NO_CAPTAIN,
 ): PricingResult {
   const gameIds = new Set(games.map((g) => g.id));
   const candidates = pool.filter((p) => gameIds.size === 0 || gameIds.has(p.gameId));
@@ -151,8 +156,8 @@ export function priceContest(
     };
   });
 
-  const salaryCapInfo = computeSalaryCap(players, slots);
-  const scoringBaseline = computeScoringBaseline(players, slots);
+  const salaryCapInfo = computeSalaryCap(players, slots, captain);
+  const scoringBaseline = computeScoringBaseline(players, slots, captain);
 
   return { players, normalization, salaryCapInfo, scoringBaseline };
 }
@@ -325,8 +330,20 @@ function assignLineup(players: ContestPlayer[], slots: RosterSlot[], pick: Salar
   return chosen;
 }
 
-function totalSalary(players: ContestPlayer[]): number {
-  return players.reduce((sum, player) => sum + player.salary, 0);
+/**
+ * What a lineup costs, including the captain premium. A lineup being measured
+ * for the cheapest case captains its cheapest player; any other case captains
+ * its most expensive, which is what an entrant actually does.
+ */
+function totalSalary(
+  players: ContestPlayer[],
+  captain: CaptainRules = NO_CAPTAIN,
+  pick: 'cheapest' | 'priciest' = 'priciest',
+): number {
+  const base = players.reduce((sum, player) => sum + player.salary, 0);
+  if (!captain.enabled || players.length === 0) return base;
+  const premiums = players.map((player) => effectiveSalary(player.salary, true, captain.multiplier) - player.salary);
+  return base + (pick === 'cheapest' ? Math.min(...premiums) : Math.max(...premiums));
 }
 
 /**
@@ -337,10 +354,14 @@ function totalSalary(players: ContestPlayer[]): number {
  * several stars but never all of them, and always has enough room to field a
  * complete roster.
  */
-export function computeSalaryCap(players: ContestPlayer[], slots: RosterSlot[]): SalaryCapInfo {
-  const cheapest = totalSalary(assignLineup(players, slots, 'cheapest'));
-  const priciest = totalSalary(assignLineup(players, slots, 'most-expensive'));
-  const middle = totalSalary(assignLineup(players, slots, 'median'));
+export function computeSalaryCap(
+  players: ContestPlayer[],
+  slots: RosterSlot[],
+  captain: CaptainRules = NO_CAPTAIN,
+): SalaryCapInfo {
+  const cheapest = totalSalary(assignLineup(players, slots, 'cheapest'), captain, 'cheapest');
+  const priciest = totalSalary(assignLineup(players, slots, 'most-expensive'), captain);
+  const middle = totalSalary(assignLineup(players, slots, 'median'), captain);
 
   if (priciest === 0) {
     return { cap: 0, minLineupCost: 0, maxLineupCost: 0, medianLineupCost: 0, aggressiveness: 0 };
@@ -369,9 +390,14 @@ export function computeSalaryCap(players: ContestPlayer[], slots: RosterSlot[]):
  * denominator for the game-winner bonus so that the bonus never depends on any
  * individual user's score (which would make scoring circular).
  */
-export function computeScoringBaseline(players: ContestPlayer[], slots: RosterSlot[]): number {
+export function computeScoringBaseline(
+  players: ContestPlayer[],
+  slots: RosterSlot[],
+  captain: CaptainRules = NO_CAPTAIN,
+): number {
   const used = new Set<string>();
   let total = 0;
+  let best = 0;
   for (const slot of slotsByScarcity(slots, players)) {
     const eligible = players
       .filter((player) => !used.has(player.id) && isEligible(player, slot))
@@ -382,7 +408,11 @@ export function computeScoringBaseline(players: ContestPlayer[], slots: RosterSl
     const selected = upperHalf[Math.floor((upperHalf.length - 1) / 2)];
     used.add(selected.id);
     total += selected.projection.normalized;
+    best = Math.max(best, selected.projection.normalized);
   }
+  // A realistic entry captains its strongest player, which lifts the expected
+  // score the game-winner bonus is a percentage of.
+  if (captain.enabled) total += best * (captain.multiplier - 1);
   return round2(total);
 }
 

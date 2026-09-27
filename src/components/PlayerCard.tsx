@@ -9,6 +9,10 @@ export interface PlayerCardProps {
   unaffordable?: boolean;
   /** Show live points instead of the projection. */
   live?: boolean;
+  /** This player is the team captain. */
+  captain?: boolean;
+  /** Salary and points multiplier applied to the captain. */
+  captainMultiplier?: number;
   onClick?: () => void;
   onInfo?: () => void;
 }
@@ -18,10 +22,28 @@ export interface PlayerCardProps {
  * either the projection or live scoring. Availability is communicated by the
  * card's own styling rather than by extra labels.
  */
-export function PlayerCard({ player, selected, used, unaffordable, live, onClick, onInfo }: PlayerCardProps) {
+export function PlayerCard({
+  player,
+  selected,
+  used,
+  unaffordable,
+  live,
+  captain,
+  captainMultiplier = 1.5,
+  onClick,
+  onInfo,
+}: PlayerCardProps) {
   const scoring = (player.normalizedPoints ?? 0) > 0;
+  const salary = captain ? Math.round(player.salary * captainMultiplier) : player.salary;
+  const points = captain
+    ? Math.round((player.normalizedPoints ?? 0) * captainMultiplier * 10) / 10
+    : player.normalizedPoints ?? 0;
+  const projection = captain
+    ? Math.round(player.projection.normalized * captainMultiplier * 10) / 10
+    : player.projection.normalized;
   const classes = [
     'player',
+    captain ? 'player--captain' : '',
     selected ? 'player--selected' : '',
     used && !selected ? 'player--used' : '',
     unaffordable && !selected ? 'player--unaffordable' : '',
@@ -58,6 +80,7 @@ export function PlayerCard({ player, selected, used, unaffordable, live, onClick
 
         <span className="player__body">
           <span className="player__name">
+            {captain ? <span className="cpt-badge">CPT</span> : null}
             {player.name}
             {player.injuryStatus ? <span className="pill pill--warn">{player.injuryStatus}</span> : null}
           </span>
@@ -70,14 +93,14 @@ export function PlayerCard({ player, selected, used, unaffordable, live, onClick
       </button>
 
       <div className="player__right">
-        <span className="player__salary">{formatMoney(player.salary)}</span>
+        <span className={`player__salary${captain ? ' player__salary--captain' : ''}`}>{formatMoney(salary)}</span>
         {live ? (
           <>
-            <span className="player__points">{(player.normalizedPoints ?? 0).toFixed(1)} pts</span>
+            <span className="player__points">{points.toFixed(1)} pts</span>
             {showRaw ? <span className="player__proj">raw {(player.rawPoints ?? 0).toFixed(1)}</span> : null}
           </>
         ) : (
-          <span className="player__proj">proj {player.projection.normalized.toFixed(1)}</span>
+          <span className="player__proj">proj {projection.toFixed(1)}</span>
         )}
         {onInfo ? (
           <button type="button" className="btn btn--sm btn--ghost" style={{ minHeight: 22, padding: '0 4px' }} onClick={onInfo}>

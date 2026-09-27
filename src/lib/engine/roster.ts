@@ -1,8 +1,45 @@
 import type { ContestPlayer, RosterSlot, Sport } from '../../types';
 import type { PoolPlayer } from '../providers/types';
 
+/**
+ * How many roster spots each sport gets by default.
+ *
+ * Rosters are positionless: a spot takes any player from the contest's pool.
+ * That keeps cross-sport contests simple — there is no need to reconcile an
+ * NFL FLEX with an MLB outfielder — and it means the salary cap, rather than a
+ * position chart, is what shapes a lineup.
+ */
+export const DEFAULT_ROSTER_SIZE: Record<Sport, number> = {
+  nfl: 9,
+  mlb: 11,
+  nba: 8,
+};
+
+/** Roster size used when a contest spans more than one sport. */
+export const MULTI_SPORT_ROSTER_SIZE = 9;
+
+/** `count` interchangeable roster spots. */
+export function openRoster(count: number): RosterSlot[] {
+  return Array.from({ length: Math.max(1, count) }, (_, index) => ({
+    id: `spot${index + 1}`,
+    label: `#${index + 1}`,
+    positions: ['*'],
+  }));
+}
+
 /** Default roster formats. The admin can rewrite these per contest. */
 export const DEFAULT_ROSTERS: Record<Sport, RosterSlot[]> = {
+  nfl: openRoster(DEFAULT_ROSTER_SIZE.nfl),
+  mlb: openRoster(DEFAULT_ROSTER_SIZE.mlb),
+  nba: openRoster(DEFAULT_ROSTER_SIZE.nba),
+};
+
+/**
+ * Traditional position-by-position formats. Not used by default, but kept as
+ * presets an admin can load when they want a positional contest — the engine
+ * enforces whatever positions a slot lists.
+ */
+export const POSITIONAL_PRESETS: Record<Sport, RosterSlot[]> = {
   nfl: [
     { id: 'qb', label: 'QB', positions: ['QB'] },
     { id: 'rb1', label: 'RB', positions: ['RB'] },
@@ -39,38 +76,16 @@ export const DEFAULT_ROSTERS: Record<Sport, RosterSlot[]> = {
   ],
 };
 
-/** Trimmed per-sport cores used to compose a multi-sport roster. */
-const MULTI_SPORT_CORE: Record<Sport, RosterSlot[]> = {
-  nfl: [
-    { id: 'qb', label: 'QB', positions: ['QB'] },
-    { id: 'rb', label: 'RB', positions: ['RB'] },
-    { id: 'wr', label: 'WR', positions: ['WR'] },
-    { id: 'nflflex', label: 'NFL FLEX', positions: ['RB', 'WR', 'TE'] },
-  ],
-  mlb: [
-    { id: 'p', label: 'P', positions: ['P'] },
-    { id: 'bat1', label: 'BAT', positions: ['*'] },
-    { id: 'bat2', label: 'BAT', positions: ['*'] },
-  ],
-  nba: [
-    { id: 'g', label: 'G', positions: ['G', 'PG', 'SG'] },
-    { id: 'f', label: 'F', positions: ['F', 'SF', 'PF', 'C'] },
-    { id: 'nbautil', label: 'NBA UTIL', positions: ['*'] },
-  ],
-};
-
 /**
- * Default roster for a set of sports. Single-sport contests get that sport's
- * full format; multi-sport contests get each sport's core, pinned to its sport
- * so a slot can never be filled from the wrong player pool.
+ * Default roster for a set of sports: interchangeable spots, sized for the
+ * sport. A multi-sport contest gets one shared set of spots, so an entrant can
+ * take as many or as few players from each sport as their salary allows.
  */
 export function buildDefaultRoster(sports: Sport[]): RosterSlot[] {
   const unique = Array.from(new Set(sports));
   if (unique.length === 0) return [];
-  if (unique.length === 1) return DEFAULT_ROSTERS[unique[0]].map((slot) => ({ ...slot }));
-  return unique.flatMap((sport) =>
-    MULTI_SPORT_CORE[sport].map((slot) => ({ ...slot, id: `${sport}-${slot.id}`, sport })),
-  );
+  if (unique.length === 1) return openRoster(DEFAULT_ROSTER_SIZE[unique[0]]);
+  return openRoster(MULTI_SPORT_ROSTER_SIZE);
 }
 
 type EligiblePlayer = Pick<ContestPlayer, 'sport' | 'positions'> | Pick<PoolPlayer, 'sport' | 'positions'>;
@@ -114,11 +129,19 @@ export function positionDemand<T extends EligiblePlayer & { position: string }>(
 }
 
 export function rosterSummary(slots: RosterSlot[]): string {
+  if (slots.length === 0) return 'No roster spots';
+  // A positionless roster is described by its size, not by a position chart.
+  if (isOpenRoster(slots)) return `${slots.length} roster spots`;
   const counts = new Map<string, number>();
   for (const slot of slots) counts.set(slot.label, (counts.get(slot.label) ?? 0) + 1);
   return Array.from(counts.entries())
     .map(([label, count]) => (count > 1 ? `${count}×${label}` : label))
     .join(' · ');
+}
+
+/** True when every spot takes any player from the pool. */
+export function isOpenRoster(slots: RosterSlot[]): boolean {
+  return slots.length > 0 && slots.every((slot) => slot.positions.includes('*') && !slot.sport);
 }
 
 /** Roster slots are identified by id; keep them unique when editing. */

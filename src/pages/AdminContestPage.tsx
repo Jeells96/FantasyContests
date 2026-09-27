@@ -6,7 +6,13 @@ import { buildPlayerPool, listGamesRange, type ProviderGame } from '../lib/provi
 import { earliestStart, formatGameTime, latestStart } from '../lib/engine/contestState';
 import { formatMoney } from '../lib/engine/lineup';
 import { gameWinnerBonusPoints, priceContest, type PricingResult } from '../lib/engine/pricing';
-import { DEFAULT_ROSTERS, buildDefaultRoster, normalizeSlotIds } from '../lib/engine/roster';
+import {
+  POSITIONAL_PRESETS,
+  buildDefaultRoster,
+  isOpenRoster,
+  normalizeSlotIds,
+  openRoster,
+} from '../lib/engine/roster';
 import { cloneScoring, DEFAULT_SCORING, defaultScoringFor } from '../lib/scoring';
 import { STATS_BY_SPORT, statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
@@ -61,7 +67,7 @@ export function AdminContestPage() {
   const [available, setAvailable] = useState<ProviderGame[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
-  const [rosterSlots, setRosterSlots] = useState<RosterSlot[]>(DEFAULT_ROSTERS.nfl);
+  const [rosterSlots, setRosterSlots] = useState<RosterSlot[]>(buildDefaultRoster(['nfl']));
   const [scoring, setScoring] = useState<ContestScoring>(defaultScoringFor(['nfl']));
   const [gameWinnerEnabled, setGameWinnerEnabled] = useState(true);
   const [bonusPercent, setBonusPercent] = useState(5);
@@ -634,16 +640,22 @@ function RosterEditor({
         <span className="tiny faint">{slots.length} spots</span>
       </div>
 
+      <p className="tiny muted" style={{ marginTop: 0 }}>
+        Spots are interchangeable by default — any player from the pool fits any spot, which keeps multi-sport
+        contests simple. Entrants may leave spots empty if they run out of salary. Type positions into a spot to
+        restrict it.
+      </p>
+
       <div className="scroll-x" style={{ marginBottom: 10 }}>
-        {sports.map((sport) => (
+        {[6, 8, 9, 11].map((count) => (
           <button
-            key={sport}
+            key={count}
             type="button"
-            className="btn btn--sm"
+            className={`btn btn--sm${slots.length === count && isOpenRoster(slots) ? ' btn--primary' : ''}`}
             style={{ flex: 'none' }}
-            onClick={() => onChange(DEFAULT_ROSTERS[sport].map((slot) => ({ ...slot })))}
+            onClick={() => onChange(openRoster(count))}
           >
-            Load {SPORT_LABELS[sport]} default
+            {count} spots
           </button>
         ))}
         {sports.length > 1 ? (
@@ -653,9 +665,23 @@ function RosterEditor({
             style={{ flex: 'none' }}
             onClick={() => onChange(buildDefaultRoster(sports))}
           >
-            Load multi-sport default
+            Multi-sport default
           </button>
         ) : null}
+      </div>
+
+      <div className="scroll-x" style={{ marginBottom: 10 }}>
+        {sports.map((sport) => (
+          <button
+            key={sport}
+            type="button"
+            className="btn btn--sm btn--ghost"
+            style={{ flex: 'none' }}
+            onClick={() => onChange(POSITIONAL_PRESETS[sport].map((slot) => ({ ...slot })))}
+          >
+            {SPORT_LABELS[sport]} positional preset
+          </button>
+        ))}
       </div>
 
       <div className="list">
@@ -717,14 +743,16 @@ function RosterEditor({
         className="btn btn--sm btn--block"
         style={{ marginTop: 10 }}
         onClick={() =>
-          onChange(normalizeSlotIds([...slots, { id: 'slot', label: 'FLEX', positions: ['*'] }]))
+          onChange(
+            normalizeSlotIds([...slots, { id: 'spot', label: `#${slots.length + 1}`, positions: ['*'] }]),
+          )
         }
       >
         + Add roster spot
       </button>
       <p className="tiny faint" style={{ marginBottom: 0, marginTop: 8 }}>
-        Use <code>*</code> for a spot that accepts any position. Pinning a spot to a sport keeps multi-sport
-        contests balanced.
+        <code>*</code> accepts any player. Listing positions (<code>RB, WR, TE</code>) restricts the spot, and
+        pinning it to a sport keeps that spot for that sport's pool.
       </p>
     </div>
   );

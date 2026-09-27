@@ -250,7 +250,9 @@ export function ContestPage() {
                     <div className="eyebrow">Player pool · {visiblePlayers.length}</div>
                     {activeSlot ? (
                       <button type="button" className="btn btn--sm btn--ghost" onClick={() => setActiveSlotId(null)}>
-                        Clear {activeSlot.label} filter ✕
+                        {activeSlot.positions.includes('*')
+                          ? `Filling ${activeSlot.label} ✕`
+                          : `${activeSlot.label} only ✕`}
                       </button>
                     ) : null}
                   </div>
@@ -311,7 +313,7 @@ export function ContestPage() {
                   <div className="section-title">
                     <h2 style={{ fontSize: 15 }}>Your lineup</h2>
                     <span className="tiny faint">
-                      {validation?.filledSlots ?? 0}/{contest.rosterSlots.length}
+                      {validation?.filledSlots ?? 0} of {contest.rosterSlots.length} spots
                     </span>
                   </div>
                   <RosterPanel
@@ -344,13 +346,19 @@ export function ContestPage() {
                 {validation && validation.errors.length > 0 ? (
                   <div className="card card--tight">
                     <div className="eyebrow" style={{ marginBottom: 6 }}>
-                      Still needed
+                      Before you submit
                     </div>
                     <ul className="tiny muted" style={{ margin: 0, paddingLeft: 18 }}>
                       {validation.errors.slice(0, 5).map((error) => (
                         <li key={error}>{error}</li>
                       ))}
                     </ul>
+                  </div>
+                ) : validation && validation.filledSlots < contest.rosterSlots.length ? (
+                  <div className="banner">
+                    You can submit with {contest.rosterSlots.length - validation.filledSlots} spot
+                    {contest.rosterSlots.length - validation.filledSlots === 1 ? '' : 's'} left empty — an empty
+                    spot just scores nothing.
                   </div>
                 ) : null}
               </div>

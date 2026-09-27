@@ -70,7 +70,7 @@ export function RosterPanel({
                 </>
               ) : (
                 <span className="slot__empty">
-                  Empty · {slot.positions.includes('*') ? 'any position' : slot.positions.join(' / ')}
+                  {slot.positions.includes('*') ? 'Empty — tap to fill' : `Empty · ${slot.positions.join(' / ')}`}
                 </span>
               )}
             </button>

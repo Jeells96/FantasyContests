@@ -16,6 +16,8 @@ statistical events.
 - Browse open, live and completed contests.
 - Build one lineup per contest against an automatically calculated salary cap, with player cards showing
   headshots, position, team, opponent, salary, season stats, projections and live points.
+- Roster spots are interchangeable — any player fits any spot — and a lineup does not have to be full: spend
+  the cap on six stars instead of nine ordinary players if you prefer. Empty spots simply score nothing.
 - Make a game-winner pick for every game when the admin enables it.
 - Watch a live leaderboard with broadcast-style scoring animations.
 
@@ -24,7 +26,8 @@ statistical events.
 - The app retrieves players, teams, positions, opponents, headshots, season production and recent form.
 - Salaries, the salary cap, cross-sport normalization factors and the game-winner bonus baseline are all
   calculated — none of them are typed in.
-- Customise the roster format, the scoring table for each sport and the game-winner bonus percentage.
+- Customise the number of roster spots, the scoring table for each sport and the game-winner bonus percentage.
+  Spots can optionally be restricted to positions or to one sport if a positional contest is wanted.
 - Run live scoring from the browser or from a headless worker.
 
 ---
@@ -162,6 +165,16 @@ are each constructed, and the cap is placed ~62% of the way from median to maxim
 reach 92% of the all-stars lineup and never falls below what a complete roster costs. On real slates this lands
 around 80% of the all-stars lineup — several stars fit, all of them never do.
 
+Because rosters are positionless and need not be filled, the cap is the real constraint on a lineup, and the
+trade-off it creates is the interesting one: a few expensive stars with spots left empty, or a full roster of
+cheaper players.
+
+### Roster format (`src/lib/engine/roster.ts`)
+Contests default to interchangeable spots (9 for NFL, 11 for MLB, 8 for NBA, 9 for multi-sport), which is what
+makes a cross-sport contest straightforward — there is no NFL FLEX to reconcile with an MLB outfielder. The
+engine still enforces whatever a spot lists, so an admin can load a traditional positional preset, restrict one
+spot to `RB, WR, TE`, or pin a spot to a single sport.
+
 ### Game-winner bonus
 The bonus is a percentage of a **contest scoring baseline** frozen when the contest is created: the expected
 normalized score of a solid, ordinary lineup from the pool. It is never a percentage of a user's own score,
@@ -185,10 +198,11 @@ which would make scoring circular, and every entrant receives exactly the same p
   stored lock timestamp, which is the first game's start.
 - **No user-writable field contains a score.** Scores are recomputed from the admin-written player pool every
   time the leaderboard renders, so an entry cannot carry points of its own.
-- **Submitted lineups are re-validated when scored.** The rules check ownership, lock state, entry shape,
-  lineup length and the self-reported salary against the cap; `buildLeaderboard` then re-checks every lineup
-  against the stored salaries, the cap and position eligibility, and flags and demotes any entry that breaks
-  them. A lineup crafted outside the UI therefore gains nothing.
+- **Submitted lineups are re-validated when scored.** The rules check ownership, lock state, entry shape, that
+  a lineup is never longer than the roster, and the self-reported salary against the cap; `buildLeaderboard`
+  then re-checks every lineup against the stored salaries, the cap, duplicate players and any position
+  restrictions, and flags and demotes any entry that breaks them. A lineup crafted outside the UI therefore
+  gains nothing. A lineup that is merely *short* is legal and is scored normally.
 
 The PIN's only job is to sign in to the admin account. Anyone who learns the PIN is an admin — but nobody who
 doesn't have it can write admin data, whatever they do to the frontend.

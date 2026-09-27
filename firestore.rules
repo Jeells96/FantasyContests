@@ -55,7 +55,10 @@ service cloud.firestore {
         && entry.displayName.size() > 0
         && entry.displayName.size() <= 60
         && entry.lineup is list
-        && entry.lineup.size() == contest.rosterSlots.size()
+        // A lineup may be shorter than the roster: an entrant who runs out of
+        // salary can submit with spots left empty. It can never be longer.
+        && entry.lineup.size() >= 1
+        && entry.lineup.size() <= contest.rosterSlots.size()
         && entry.picks is map
         && entry.salaryUsed is number
         && entry.salaryUsed >= 0

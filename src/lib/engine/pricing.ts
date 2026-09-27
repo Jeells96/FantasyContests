@@ -43,9 +43,14 @@ const COMPONENT_CEILING = 1.25;
  * legal lineup. Below 1 by construction: a full roster of the chalk must never
  * fit under the cap.
  */
-const CAP_AGGRESSIVENESS = 0.62;
-/** The cap may never reach this share of the most expensive possible lineup. */
-const CAP_MAX_SHARE_OF_STARS = 0.92;
+const CAP_AGGRESSIVENESS = 0.4;
+/**
+ * The cap may never reach this share of the most expensive possible lineup.
+ * Tuned against real slates to sit near where a mainstream DFS site lands
+ * (~62-68% of an all-stars roster), which is tight enough that affording two or
+ * three premium players means genuinely economising everywhere else.
+ */
+const CAP_MAX_SHARE_OF_STARS = 0.68;
 /** Headroom above the cheapest legal lineup, so a valid entry always exists. */
 const CAP_MIN_HEADROOM = 1.15;
 

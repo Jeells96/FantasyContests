@@ -123,6 +123,14 @@ export function ContestPage() {
   function assignPlayer(player: ContestPlayer) {
     if (!contest || locked) return;
     setMessage(null);
+
+    // Selecting a player who is already rostered takes them back out, so the
+    // same tap both adds and removes.
+    if (lineup.some((line) => line.playerId === player.id)) {
+      setLineup((current) => current.filter((line) => line.playerId !== player.id));
+      return;
+    }
+
     const target =
       activeSlot && isEligible(player, activeSlot)
         ? activeSlot
@@ -130,9 +138,24 @@ export function ContestPage() {
             (slot) => isEligible(player, slot) && !lineup.some((line) => line.slotId === slot.id),
           );
     if (!target) {
-      setMessage({ tone: 'bad', text: `No open roster spot for ${player.position}. Tap a slot to replace it.` });
+      setMessage({ tone: 'bad', text: `No open roster spot for ${player.position}. Tap a spot to replace it.` });
       return;
     }
+
+    // Whoever holds the target spot is refunded before the cap is checked.
+    const replaced = lineup.find((line) => line.slotId === target.id);
+    const refund = replaced ? playersById.get(replaced.playerId)?.salary ?? 0 : 0;
+    const available = cap - salaryUsed + refund;
+    if (player.salary > available) {
+      setMessage({
+        tone: 'bad',
+        text: `${player.name} costs ${formatMoney(player.salary)} and you have ${formatMoney(
+          available,
+        )} left. Drop someone first.`,
+      });
+      return;
+    }
+
     setLineup((current) => [
       ...current.filter((line) => line.slotId !== target.id && line.playerId !== player.id),
       { slotId: target.id, playerId: player.id },

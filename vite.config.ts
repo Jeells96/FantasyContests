@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Served from the domain root by default (Firebase Hosting); GitHub Pages
+  // serves from /<repo>/, so the deploy workflow sets BASE_PATH.
+  base: process.env.BASE_PATH ?? '/',
   build: {
     outDir: 'dist',
     sourcemap: true,

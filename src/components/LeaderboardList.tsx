@@ -1,0 +1,142 @@
+import { useState } from 'react';
+import type { Contest, LeaderboardRow } from '../types';
+import { formatMoney } from '../lib/engine/lineup';
+import { Empty } from './ui';
+
+/**
+ * Live leaderboard. Rosters are only ever present in a row once the contest has
+ * locked (or for the viewer's own entry), because the data for other entrants
+ * simply is not readable before then.
+ */
+export function LeaderboardList({
+  rows,
+  contest,
+  locked,
+}: {
+  rows: LeaderboardRow[];
+  contest: Contest;
+  locked: boolean;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  if (rows.length === 0) {
+    return <Empty title="No entries yet" hint="Be the first to build a lineup." />;
+  }
+
+  return (
+    <div className="list">
+      {!locked ? (
+        <div className="banner banner--warn">
+          Rosters and game-winner picks stay hidden until the first game starts. Scoring begins at lock.
+        </div>
+      ) : null}
+
+      {rows.map((row) => {
+        const open = expanded === row.uid;
+        return (
+          <div key={row.uid}>
+            <button
+              type="button"
+              className={`lb-row${row.isSelf ? ' lb-row--self' : ''}${row.rank === 1 ? ' lb-row--leader' : ''}`}
+              onClick={() => setExpanded(open ? null : row.uid)}
+            >
+              <span className="lb-rank">{row.rank}</span>
+              <span style={{ minWidth: 0 }}>
+                <span className="lb-name">
+                  {row.displayName}
+                  {row.isSelf ? <span className="tiny muted"> · you</span> : null}
+                </span>
+                <span className="lb-sub">
+                  {row.fantasyPoints.toFixed(1)} pts
+                  {contest.gameWinner.enabled ? (
+                    <>
+                      {' · '}
+                      {row.correctPicks}/{row.totalPicks} picks
+                      {row.bonusPoints > 0 ? ` (+${row.bonusPoints.toFixed(1)})` : ''}
+                    </>
+                  ) : null}
+                  {row.lines ? ` · ${formatMoney(row.salaryUsed)}` : ''}
+                  {row.violations.length > 0 ? ' · invalid lineup' : ''}
+                </span>
+              </span>
+              <span className="lb-total">{row.total.toFixed(1)}</span>
+            </button>
+
+            {open ? (
+              <div className="lb-detail">
+                {row.violations.length > 0 ? (
+                  <div className="banner banner--bad" style={{ marginBottom: 10 }}>
+                    This lineup does not satisfy the contest rules: {row.violations.join('; ')}.
+                  </div>
+                ) : null}
+
+                {row.lines ? (
+                  <>
+                    {row.lines.map((line) => (
+                      <div className="lb-line" key={line.slot.id}>
+                        <span className="faint" style={{ fontWeight: 700 }}>
+                          {line.slot.label}
+                        </span>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {line.player ? (
+                            <>
+                              {line.player.name}
+                              <span className="faint">
+                                {' '}
+                                {line.player.position} · {line.player.teamAbbr}
+                              </span>
+                              {line.player.statLine ? (
+                                <div className="tiny faint">{line.player.statLine}</div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="faint">empty</span>
+                          )}
+                        </span>
+                        <span className="num faint">{line.player ? formatMoney(line.player.salary) : ''}</span>
+                        <span className="num" style={{ fontWeight: 800, minWidth: 54, textAlign: 'right' }}>
+                          {line.normalizedPoints.toFixed(1)}
+                          {line.player && line.player.sport !== 'nfl' ? (
+                            <div className="tiny faint">raw {line.rawPoints.toFixed(1)}</div>
+                          ) : null}
+                        </span>
+                      </div>
+                    ))}
+
+                    {contest.gameWinner.enabled && row.picks ? (
+                      <div style={{ marginTop: 10 }}>
+                        <div className="eyebrow" style={{ marginBottom: 6 }}>
+                          Game winner picks
+                        </div>
+                        <div className="row row--wrap" style={{ gap: 6 }}>
+                          {contest.games.map((game) => {
+                            const pick = row.picks?.[game.id];
+                            const team = [game.home, game.away].find((t) => t.id === pick);
+                            const correct = game.winnerTeamId && pick === game.winnerTeamId;
+                            const wrong = game.winnerTeamId && pick !== game.winnerTeamId;
+                            return (
+                              <span
+                                key={game.id}
+                                className={`pill${correct ? ' pill--open' : ''}${wrong ? ' pill--bad' : ''}`}
+                              >
+                                {team?.abbreviation ?? '—'}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="tiny muted">
+                    This entrant's roster is hidden until the contest locks.
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

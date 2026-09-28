@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Banner, Empty, Spinner, SportPill, StatusPill } from '../components/ui';
-import { deleteContest, listenContests, patchContest } from '../lib/db';
-import { deriveStatus, formatDateTime } from '../lib/engine/contestState';
-import { rosterSummary } from '../lib/engine/roster';
-import { formatMoney } from '../lib/engine/lineup';
+import { Banner, Spinner } from '../components/ui';
+import { FALLBACK_DEFAULTS, listenContestDefaults, saveContestDefaults, type ContestDefaults } from '../lib/defaults';
+import { DEFAULT_ROSTER_SIZE } from '../lib/engine/roster';
 import { useSession } from '../state/SessionContext';
-import type { Contest } from '../types';
+import type { Sport } from '../types';
+
+const SPORTS: Sport[] = ['nfl', 'mlb', 'nba'];
 
 /**
- * Admin area. The PIN unlocks a dedicated Firebase Auth account; every write
- * below is checked again by the Firestore security rules, so an unlocked UI on
- * its own grants nothing.
+ * Admin area.
+ *
+ * Contests are no longer run from here — anyone can start one. What the PIN
+ * protects is the house settings every new contest opens with.
  */
 export function AdminPage() {
   const { isAdmin } = useSession();
-  return <main className="page">{isAdmin ? <AdminDashboard /> : <PinGate />}</main>;
+  return <main className="page">{isAdmin ? <DefaultsEditor /> : <PinGate />}</main>;
 }
 
 function PinGate() {
@@ -30,7 +30,7 @@ function PinGate() {
     setError(null);
     try {
       await unlockAdmin(pin);
-    } catch (e) {
+    } catch {
       setError('Incorrect PIN.');
       setPin('');
     } finally {
@@ -43,7 +43,10 @@ function PinGate() {
       <div className="center">
         <div className="eyebrow">Restricted</div>
         <h1 style={{ fontSize: 22, fontWeight: 900 }}>Admin access</h1>
-        <p className="muted tiny">Enter the admin PIN to manage contests.</p>
+        <p className="muted tiny">
+          Enter the admin PIN to change the settings new contests start with. You do not need this to
+          start a contest.
+        </p>
       </div>
       <form className="stack" onSubmit={submit}>
         <input
@@ -65,118 +68,184 @@ function PinGate() {
   );
 }
 
-function AdminDashboard() {
-  const { lockAdmin } = useSession();
-  const [contests, setContests] = useState<Contest[] | null>(null);
+function DefaultsEditor() {
+  const { lockAdmin, uid } = useSession();
+  const [draft, setDraft] = useState<ContestDefaults | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(
     () =>
-      listenContests(setContests, (e) => setError(e.message)),
+      listenContestDefaults(
+        (next) => setDraft((current) => current ?? next),
+        (e) => setError(e.message),
+      ),
     [],
   );
 
-  async function remove(contest: Contest) {
-    if (!window.confirm(`Delete "${contest.name}" and every entry in it? This cannot be undone.`)) return;
-    setBusyId(contest.id);
+  function update(patch: Partial<ContestDefaults>) {
+    setSaved(false);
+    setDraft((current) => ({ ...(current ?? FALLBACK_DEFAULTS), ...patch }));
+  }
+
+  function toggleSport(sport: Sport) {
+    if (!draft) return;
+    const next = draft.sports.includes(sport)
+      ? draft.sports.filter((value) => value !== sport)
+      : [...draft.sports, sport];
+    // At least one sport, or the game picker has nothing to load.
+    update({ sports: next.length > 0 ? next : draft.sports });
+  }
+
+  async function save() {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
     try {
-      await deleteContest(contest.id);
+      await saveContestDefaults(draft, uid);
+      setSaved(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : 'Could not save');
     } finally {
-      setBusyId(null);
+      setSaving(false);
     }
   }
 
-  async function finalize(contest: Contest) {
-    setBusyId(contest.id);
-    try {
-      await patchContest(contest.id, { status: 'complete', finalizedAt: new Date().toISOString() });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not finalize');
-    } finally {
-      setBusyId(null);
-    }
-  }
+  if (!draft) return <Spinner label="Loading settings…" />;
+
+  const rosterHint =
+    draft.rosterSpots > 0
+      ? `${draft.rosterSpots} spots`
+      : `the usual size (NFL ${DEFAULT_ROSTER_SIZE.nfl}, MLB ${DEFAULT_ROSTER_SIZE.mlb}, NBA ${DEFAULT_ROSTER_SIZE.nba})`;
 
   return (
     <div className="stack stack--lg">
       <div className="row row--between">
         <div>
           <div className="eyebrow">Admin</div>
-          <h1 style={{ fontSize: 22, fontWeight: 900 }}>Contest management</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 900 }}>Default settings</h1>
         </div>
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => void lockAdmin()}>
           Lock admin
         </button>
       </div>
 
-      <Link to="/admin/new" className="btn btn--primary btn--block">
-        + Create contest
-      </Link>
+      <p className="tiny muted" style={{ margin: 0 }}>
+        Anyone can start a contest. These are the settings their builder opens with — whoever starts a
+        contest can still change any of it before publishing.
+      </p>
 
       {error ? <Banner tone="bad">{error}</Banner> : null}
-      {contests === null ? <Spinner label="Loading…" /> : null}
-      {contests?.length === 0 ? <Empty title="No contests yet" hint="Create your first contest above." /> : null}
 
-      <div className="list">
-        {(contests ?? []).map((contest) => {
-          const status = deriveStatus(contest);
-          return (
-            <div className="card" key={contest.id}>
-              <div className="row row--between" style={{ alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 800 }}>{contest.name}</div>
-                  <div className="row row--wrap" style={{ gap: 6, marginTop: 6 }}>
-                    {contest.sports.map((sport) => (
-                      <SportPill key={sport} sport={sport} />
-                    ))}
-                    <span className="pill">{contest.games.length} games</span>
-                    <span className="pill">{contest.playerCount} players</span>
-                    <span className="pill">{formatMoney(contest.salaryCapInfo.cap)}</span>
-                  </div>
-                  <div className="tiny faint" style={{ marginTop: 6 }}>
-                    {rosterSummary(contest.rosterSlots)} · locks {formatDateTime(contest.lockTime)} ·{' '}
-                    {contest.entrantCount} entries
-                  </div>
-                </div>
-                <StatusPill status={status} />
-              </div>
+      <div className="card stack">
+        <div>
+          <div className="label">Sports selected to start</div>
+          <div className="row row--wrap" style={{ gap: 8, marginTop: 8 }}>
+            {SPORTS.map((sport) => (
+              <button
+                key={sport}
+                type="button"
+                className={`btn btn--sm${draft.sports.includes(sport) ? ' btn--primary' : ''}`}
+                onClick={() => toggleSport(sport)}
+              >
+                {sport.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
 
-              <div className="row row--wrap" style={{ gap: 8, marginTop: 12 }}>
-                <Link to={`/admin/contest/${contest.id}`} className="btn btn--sm">
-                  Edit
-                </Link>
-                <Link to={`/admin/live/${contest.id}`} className="btn btn--sm">
-                  Live scoring
-                </Link>
-                <Link to={`/contest/${contest.id}`} className="btn btn--sm btn--ghost">
-                  View
-                </Link>
-                {status !== 'complete' ? (
-                  <button
-                    type="button"
-                    className="btn btn--sm btn--ghost"
-                    disabled={busyId === contest.id}
-                    onClick={() => void finalize(contest)}
-                  >
-                    Mark final
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn btn--sm btn--danger"
-                  disabled={busyId === contest.id}
-                  onClick={() => void remove(contest)}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          );
-        })}
+        <label className="field">
+          <span className="label">Days of games to load</span>
+          <input
+            className="input"
+            type="number"
+            min={1}
+            max={14}
+            value={draft.days}
+            onChange={(event) => update({ days: clamp(Number(event.target.value), 1, 14) })}
+          />
+          <span className="tiny faint">How far ahead the game picker looks from the chosen date.</span>
+        </label>
+
+        <label className="field">
+          <span className="label">Roster spots</span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={12}
+            value={draft.rosterSpots}
+            onChange={(event) => update({ rosterSpots: clamp(Number(event.target.value), 0, 12) })}
+          />
+          <span className="tiny faint">0 means use {rosterHint}.</span>
+        </label>
       </div>
+
+      <div className="card stack">
+        <label className="row row--between">
+          <span className="label" style={{ margin: 0 }}>
+            Team captain on by default
+          </span>
+          <input
+            type="checkbox"
+            checked={draft.captainEnabled}
+            onChange={(event) => update({ captainEnabled: event.target.checked })}
+          />
+        </label>
+        <label className="field">
+          <span className="label">Captain multiplier</span>
+          <input
+            className="input"
+            type="number"
+            step={0.1}
+            min={1}
+            max={3}
+            value={draft.captainMultiplier}
+            onChange={(event) => update({ captainMultiplier: clamp(Number(event.target.value), 1, 3) })}
+          />
+          <span className="tiny faint">Captains cost this much more and score this much more.</span>
+        </label>
+      </div>
+
+      <div className="card stack">
+        <label className="row row--between">
+          <span className="label" style={{ margin: 0 }}>
+            Game-winner picks on by default
+          </span>
+          <input
+            type="checkbox"
+            checked={draft.gameWinnerEnabled}
+            onChange={(event) => update({ gameWinnerEnabled: event.target.checked })}
+          />
+        </label>
+        <label className="field">
+          <span className="label">Bonus per correct pick</span>
+          <input
+            className="input"
+            type="number"
+            step={0.5}
+            min={0}
+            max={50}
+            value={draft.bonusPercent}
+            onChange={(event) => update({ bonusPercent: clamp(Number(event.target.value), 0, 50) })}
+          />
+          <span className="tiny faint">Percent of a median lineup's score, per pick against the spread.</span>
+        </label>
+      </div>
+
+      <button type="button" className="btn btn--primary btn--block" disabled={saving} onClick={() => void save()}>
+        {saving ? <span className="spinner" /> : saved ? 'Saved ✓' : 'Save defaults'}
+      </button>
+
+      {draft.updatedAt ? (
+        <div className="tiny faint center">Last changed {new Date(draft.updatedAt).toLocaleString()}</div>
+      ) : null}
     </div>
   );
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
 }

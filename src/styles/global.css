@@ -1897,3 +1897,67 @@ h4 {
     animation: none;
   }
 }
+
+/* ---------- Contest join codes ---------- */
+
+.joincode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  min-width: 0;
+}
+
+.joincode__label {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.joincode__digits {
+  font-size: 16px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.22em;
+  color: var(--text);
+}
+
+.joincode__digits--lg {
+  font-size: 20px;
+}
+
+.joincode__who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.joincode__copy {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.joincode--inline {
+  padding: 6px 9px;
+}
+
+.joincode--inline .joincode__digits {
+  font-size: 15px;
+}
+
+.input--code {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

@@ -9,8 +9,14 @@ rules_version = '2';
  *
  * WHAT THIS MEANS: anyone who has the project's web config (it ships in the
  * JavaScript bundle, as it must) can read and write this database directly.
- * The admin PIN keeps the admin screens out of casual reach, not out of a
+ * The admin PIN keeps the default settings out of casual reach, not out of a
  * determined one.
+ *
+ * Anyone can start a contest. A contest belongs to the device that created it,
+ * and it is reached by its six-digit join code: nothing in the app lists every
+ * contest, so a player only sees the ones they started or joined. Ownership and
+ * membership are enforced in the app, not here, because there is no login for
+ * the rules to check a device id against.
  *
  * Two contest rules are still enforced here, because they need no login:
  *   - lineups and picks freeze when the contest locks, so a submitted entry

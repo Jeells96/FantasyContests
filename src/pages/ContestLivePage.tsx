@@ -20,20 +20,20 @@ import type { Contest, ContestPlayer } from '../types';
 const INTERVALS = [20, 30, 60, 120];
 
 /**
- * Live scoring control.
+ * Live scoring control, for whoever started the contest.
  *
  * Polls the sports feeds, converts new statistics into raw and normalized
  * fantasy points and writes them to the contest's player pool. Every connected
- * user then receives the update through Firestore without refreshing. Only the
- * admin session can write these documents, so live statistics and player scores
- * are not user-writable.
+ * user then receives the update through Firestore without refreshing. Open
+ * contest pages sync on their own, so this is a way to watch and force a round
+ * rather than something that has to be left running.
  *
  * `scripts/live-sync.mjs` runs the same loop headlessly if you would rather not
  * keep a browser tab open.
  */
-export function AdminLivePage() {
+export function ContestLivePage() {
   const { contestId } = useParams<{ contestId: string }>();
-  const { isAdmin } = useSession();
+  const { uid } = useSession();
   const [contest, setContest] = useState<Contest | null>(null);
   const [players, setPlayers] = useState<ContestPlayer[]>([]);
   const [log, setLog] = useState<string[]>([]);
@@ -137,13 +137,6 @@ export function AdminLivePage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <main className="page">
-        <Empty title="Admin only" hint="Unlock the admin area with the PIN first." />
-      </main>
-    );
-  }
   if (loading) {
     return (
       <main className="page">
@@ -158,6 +151,17 @@ export function AdminLivePage() {
       </main>
     );
   }
+  // Scoring controls belong to whoever runs the contest.
+  if (contest.ownerId && contest.ownerId !== uid) {
+    return (
+      <main className="page">
+        <Empty
+          title="Not your contest"
+          hint={`Only ${contest.ownerName || 'the person who started it'} can run scoring here.`}
+        />
+      </main>
+    );
+  }
 
   const topScorers = [...players]
     .sort((a, b) => (b.normalizedPoints ?? 0) - (a.normalizedPoints ?? 0))
@@ -167,8 +171,8 @@ export function AdminLivePage() {
     <main className="page">
       <div className="stack stack--lg">
         <div>
-          <Link to="/admin" className="tiny faint">
-            ← Admin
+          <Link to={`/contest/${contest.id}`} className="tiny faint">
+            ← Back to contest
           </Link>
           <div className="row row--between" style={{ marginTop: 6 }}>
             <h1 style={{ fontSize: 20, fontWeight: 900 }}>{contest.name}</h1>

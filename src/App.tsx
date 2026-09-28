@@ -1,8 +1,8 @@
-import { Link, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { NameGate } from './components/NameGate';
-import { AdminContestPage } from './pages/AdminContestPage';
-import { AdminLivePage } from './pages/AdminLivePage';
 import { AdminPage } from './pages/AdminPage';
+import { ContestBuilderPage } from './pages/ContestBuilderPage';
+import { ContestLivePage } from './pages/ContestLivePage';
 import { ContestPage } from './pages/ContestPage';
 import { HomePage } from './pages/HomePage';
 import { useSession } from './state/SessionContext';
@@ -32,11 +32,15 @@ export function App() {
 
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/new" element={<ContestBuilderPage />} />
         <Route path="/contest/:contestId" element={<ContestPage />} />
+        <Route path="/contest/:contestId/edit" element={<ContestBuilderPage />} />
+        <Route path="/contest/:contestId/live" element={<ContestLivePage />} />
         <Route path="/admin" element={<AdminPage />} />
-        <Route path="/admin/new" element={<AdminContestPage />} />
-        <Route path="/admin/contest/:contestId" element={<AdminContestPage />} />
-        <Route path="/admin/live/:contestId" element={<AdminLivePage />} />
+        {/* Where contest management used to live. */}
+        <Route path="/admin/new" element={<Navigate to="/new" replace />} />
+        <Route path="/admin/contest/:contestId" element={<ContestRedirect suffix="edit" />} />
+        <Route path="/admin/live/:contestId" element={<ContestRedirect suffix="live" />} />
         <Route
           path="*"
           element={
@@ -49,8 +53,13 @@ export function App() {
         />
       </Routes>
 
-      {/* Name is required to play, but the admin area does not need one. */}
+      {/* Name is required to play, but the settings area does not need one. */}
       {!identity && !inAdmin ? <NameGate onSave={saveName} /> : null}
     </div>
   );
+}
+
+function ContestRedirect({ suffix }: { suffix: string }) {
+  const { contestId } = useParams<{ contestId: string }>();
+  return <Navigate to={contestId ? `/contest/${contestId}/${suffix}` : '/'} replace />;
 }

@@ -5,7 +5,15 @@ import { rosterSummary } from '../lib/engine/roster';
 import { formatMoney } from '../lib/engine/lineup';
 import { SportPill, StatusPill } from './ui';
 
-export function ContestCard({ contest, entered }: { contest: Contest; entered: boolean }) {
+export function ContestCard({
+  contest,
+  entered,
+  isOwner,
+}: {
+  contest: Contest;
+  entered: boolean;
+  isOwner: boolean;
+}) {
   const status = deriveStatus(contest);
   const untilLock = Date.parse(contest.lockTime) - Date.now();
 
@@ -23,6 +31,15 @@ export function ContestCard({ contest, entered }: { contest: Contest; entered: b
           </div>
         </div>
         <StatusPill status={status} />
+      </div>
+
+      {/* The code lives on the card so nobody has to remember it to invite someone. */}
+      <div className="joincode joincode--inline" style={{ marginTop: 10 }}>
+        <span className="joincode__label">Code</span>
+        <span className="joincode__digits">{contest.joinCode || '——————'}</span>
+        <span className="joincode__who tiny faint">
+          {isOwner ? 'You started this' : contest.ownerName ? `${contest.ownerName}'s contest` : ''}
+        </span>
       </div>
 
       <div className="divider" style={{ marginTop: 12 }} />

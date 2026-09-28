@@ -17,7 +17,7 @@ const FRESH_MS = 25_000;
  * sports feeds and writing the results back, coordinating through the contest's
  * `lastSyncAt` so they do not all hammer the providers at once. Scoring
  * therefore runs whenever a single participant is watching, instead of
- * depending on an admin leaving a tab open or a worker running somewhere.
+ * depending on the contest owner leaving a tab open or a worker running somewhere.
  */
 export function useLiveSync(contest: Contest | null, enabled: boolean): void {
   const running = useRef(false);

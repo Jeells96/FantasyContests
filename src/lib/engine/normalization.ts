@@ -7,11 +7,11 @@ import { topMean } from './projections';
  * NFL is the baseline scale. Every other sport's raw fantasy points are
  * multiplied by a factor derived from the *selected player pool* so that the
  * production of a strong MLB or NBA player is worth about as much as that of a
- * strong NFL player. Nothing here is hand-entered by the admin.
+ * strong NFL player. Nothing here is hand-entered.
  *
  * The anchor for a sport is the mean expected fantasy output of the players who
  * would realistically be rostered from that sport's pool (its top slice), which
- * makes the factor adapt to the specific games an admin selected rather than to
+ * makes the factor adapt to the specific games the creator selected rather than to
  * league-wide averages.
  */
 

@@ -27,7 +27,7 @@ export function openRoster(count: number): RosterSlot[] {
   }));
 }
 
-/** Default roster formats. The admin can rewrite these per contest. */
+/** Default roster formats. A contest creator can rewrite these. */
 export const DEFAULT_ROSTERS: Record<Sport, RosterSlot[]> = {
   nfl: openRoster(DEFAULT_ROSTER_SIZE.nfl),
   mlb: openRoster(DEFAULT_ROSTER_SIZE.mlb),
@@ -36,7 +36,7 @@ export const DEFAULT_ROSTERS: Record<Sport, RosterSlot[]> = {
 
 /**
  * Traditional position-by-position formats. Not used by default, but kept as
- * presets an admin can load when they want a positional contest — the engine
+ * presets a creator can load when they want a positional contest — the engine
  * enforces whatever positions a slot lists.
  */
 export const POSITIONAL_PRESETS: Record<Sport, RosterSlot[]> = {

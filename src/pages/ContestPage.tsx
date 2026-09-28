@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { GamePicks } from '../components/GamePicks';
 import { LeaderboardList } from '../components/LeaderboardList';
 import { PlayerCard } from '../components/PlayerCard';
@@ -14,8 +14,8 @@ import { usePointDeltas } from '../hooks/usePointDeltas';
 import { ScoringTab } from '../components/ScoringTab';
 import { ScoreStrip } from '../components/ScoreStrip';
 import { useLiveSync } from '../hooks/useLiveSync';
-import { saveEntry } from '../lib/db';
-import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
+import { deleteContest, patchContest, saveEntry } from '../lib/db';
+import { deriveStatus, formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
 import { buildLeaderboard } from '../lib/engine/leaderboard';
 import { formatMoney, validateEntry } from '../lib/engine/lineup';
 import { isEligible, rosterSummary } from '../lib/engine/roster';
@@ -24,7 +24,8 @@ import { generateTeamName } from '../lib/teamName';
 import { captainEnabled, captainMultiplier, captainPremium } from '../lib/engine/captain';
 import { statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
-import { SPORT_LABELS, type ContestPlayer, type LineupSelection, type Sport } from '../types';
+import { JoinCode } from '../components/JoinCode';
+import { SPORT_LABELS, type Contest, type ContestPlayer, type LineupSelection, type Sport } from '../types';
 
 type Tab = 'lineup' | 'board' | 'scoring' | 'info';
 type SortKey = 'salary' | 'projection' | 'points';
@@ -286,6 +287,8 @@ export function ContestPage() {
 
   const untilLock = Date.parse(contest.lockTime) - Date.now();
   const myRow = leaderboard.find((row) => row.isSelf);
+  // Editing, scoring and deleting belong to whoever started the contest.
+  const isOwner = Boolean(contest.ownerId) && contest.ownerId === uid;
 
   return (
     <main className="page page--wide">
@@ -308,6 +311,8 @@ export function ContestPage() {
             <span className="pill">{formatMoney(cap)} cap</span>
             <span className="pill">{standings.length} entries</span>
           </div>
+          <JoinCode contest={contest} />
+          {isOwner ? <OwnerBar contest={contest} /> : null}
           <div className="tiny faint" style={{ marginTop: 6 }}>
             {status === 'open'
               ? `Everything locks when the first game starts — ${formatDateTime(contest.lockTime)} (${formatCountdown(untilLock)})`
@@ -823,6 +828,60 @@ function HowItWorks({
           Everything locks when the first game starts. Until then, nobody can see your roster.
         </li>
       </ul>
+    </div>
+  );
+}
+
+/** Contest controls, shown only to the person who started it. */
+function OwnerBar({ contest }: { contest: Contest }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const status = deriveStatus(contest);
+
+  async function remove() {
+    if (!window.confirm(`Delete "${contest.name}" and every entry in it? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await deleteContest(contest.id);
+      navigate('/');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+      setBusy(false);
+    }
+  }
+
+  async function finalize() {
+    setBusy(true);
+    setError(null);
+    try {
+      await patchContest(contest.id, { status: 'complete', finalizedAt: new Date().toISOString() });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not finalize');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+      <div className="row row--wrap" style={{ gap: 8 }}>
+        <Link to={`/contest/${contest.id}/edit`} className="btn btn--sm">
+          Edit
+        </Link>
+        <Link to={`/contest/${contest.id}/live`} className="btn btn--sm">
+          Live scoring
+        </Link>
+        {status !== 'complete' ? (
+          <button type="button" className="btn btn--sm btn--ghost" disabled={busy} onClick={() => void finalize()}>
+            Mark final
+          </button>
+        ) : null}
+        <button type="button" className="btn btn--sm btn--danger" disabled={busy} onClick={() => void remove()}>
+          Delete
+        </button>
+      </div>
+      {error ? <Banner tone="bad">{error}</Banner> : null}
     </div>
   );
 }

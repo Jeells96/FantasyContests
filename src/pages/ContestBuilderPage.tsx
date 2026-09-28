@@ -18,6 +18,7 @@ import { cloneScoring, DEFAULT_SCORING, defaultScoringFor } from '../lib/scoring
 import { DEFAULT_CAPTAIN_MULTIPLIER } from '../lib/engine/captain';
 import { STATS_BY_SPORT, statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
+import { FALLBACK_DEFAULTS, loadContestDefaults, type ContestDefaults } from '../lib/defaults';
 import {
   SPORTS,
   SPORT_LABELS,
@@ -56,9 +57,9 @@ function toPoolPlayer(player: ContestPlayer): PoolPlayer {
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-export function AdminContestPage() {
+export function ContestBuilderPage() {
   const { contestId } = useParams<{ contestId: string }>();
-  const { isAdmin } = useSession();
+  const { uid, identity } = useSession();
   const navigate = useNavigate();
   const editing = Boolean(contestId);
 
@@ -84,11 +85,33 @@ export function AdminContestPage() {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(!editing);
   const [existing, setExisting] = useState<Contest | null>(null);
+  const [defaults, setDefaults] = useState<ContestDefaults>(FALLBACK_DEFAULTS);
 
   const selectedGames = useMemo(
     () => available.filter((game) => selectedIds.includes(game.id)),
     [available, selectedIds],
   );
+
+  /* -------------------------------------------------------- house defaults ---- */
+  // What a new contest opens with. The creator can change any of it below.
+  useEffect(() => {
+    if (editing) return;
+    let cancelled = false;
+    void loadContestDefaults().then((next) => {
+      if (cancelled) return;
+      setDefaults(next);
+      setSports(next.sports);
+      setDays(next.days);
+      setCaptainOn(next.captainEnabled);
+      setCaptainX(next.captainMultiplier);
+      setGameWinnerEnabled(next.gameWinnerEnabled);
+      setBonusPercent(next.bonusPercent);
+      setRosterSlots(next.rosterSpots > 0 ? openRoster(next.rosterSpots) : buildDefaultRoster(next.sports));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing]);
 
   /* ------------------------------------------------------------ edit mode ---- */
   useEffect(() => {
@@ -97,7 +120,12 @@ export function AdminContestPage() {
     (async () => {
       try {
         const [contest, players] = await Promise.all([getContest(contestId), getPool(contestId)]);
-        if (cancelled || !contest) return;
+        if (cancelled) return;
+        if (!contest) {
+          setError('That contest no longer exists.');
+          setLoaded(true);
+          return;
+        }
         setExisting(contest);
         setSports(contest.sports);
         setAvailable(contest.games);
@@ -163,7 +191,7 @@ export function AdminContestPage() {
       }
       setPool(players);
       const sportsInPool = Array.from(new Set(players.map((p) => p.sport)));
-      setRosterSlots(buildDefaultRoster(sportsInPool));
+      setRosterSlots(defaults.rosterSpots > 0 ? openRoster(defaults.rosterSpots) : buildDefaultRoster(sportsInPool));
       setScoring(defaultScoringFor(sportsInPool));
       if (!name) {
         setName(defaultContestName(selectedGames));
@@ -217,6 +245,8 @@ export function AdminContestPage() {
         lockTime: earliestStart(games),
         lastGameStart: latestStart(games),
         status: 'open' as const,
+        ownerId: existing?.ownerId || uid,
+        ownerName: existing?.ownerName || identity?.displayName || '',
         finalizedAt: null,
         playerCount: pricing.players.length,
         notes: notes.trim(),
@@ -224,7 +254,7 @@ export function AdminContestPage() {
 
       if (editing && contestId && existing) {
         await updateContest(contestId, { ...existing, ...payload, id: contestId }, pricing.players);
-        navigate('/admin');
+        navigate(`/contest/${contestId}`);
       } else {
         const id = await createContest({ ...payload, players: pricing.players });
         navigate(`/contest/${id}`);
@@ -232,7 +262,7 @@ export function AdminContestPage() {
     } catch (e) {
       setError(
         e instanceof Error && /permission/i.test(e.message)
-          ? 'Firestore rejected the write. Is the admin account signed in and are the rules deployed?'
+          ? 'Firestore rejected the write. Are the security rules deployed?'
           : e instanceof Error
             ? e.message
             : 'Save failed',
@@ -242,13 +272,6 @@ export function AdminContestPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <main className="page">
-        <Empty title="Admin only" hint="Unlock the admin area with the PIN first." />
-      </main>
-    );
-  }
   if (!loaded) {
     return (
       <main className="page">
@@ -256,13 +279,35 @@ export function AdminContestPage() {
       </main>
     );
   }
+  if (editing) {
+    // Never open an editable builder for a contest that could not be read: an
+    // unreadable contest is not proof that it is yours.
+    if (!existing) {
+      return (
+        <main className="page">
+          <Empty title="Could not load contest" hint={error ?? 'Check your connection and try again.'} />
+        </main>
+      );
+    }
+    // A contest belongs to whoever started it; nobody else can change it.
+    if (existing.ownerId && existing.ownerId !== uid) {
+      return (
+        <main className="page">
+          <Empty
+            title="Not your contest"
+            hint={`Only ${existing.ownerName || 'the person who started it'} can edit this contest.`}
+          />
+        </main>
+      );
+    }
+  }
 
   return (
     <main className="page page--wide">
       <div className="stack stack--lg">
         <div>
-          <div className="eyebrow">Admin</div>
-          <h1 style={{ fontSize: 22, fontWeight: 900 }}>{editing ? 'Edit contest' : 'Create contest'}</h1>
+          <div className="eyebrow">{editing ? 'Your contest' : 'New contest'}</div>
+          <h1 style={{ fontSize: 22, fontWeight: 900 }}>{editing ? 'Edit contest' : 'Start a contest'}</h1>
           <p className="tiny muted" style={{ margin: '6px 0 0' }}>
             Choose games and rules. Player pools, salaries, the salary cap and cross-sport normalization are
             calculated for you.

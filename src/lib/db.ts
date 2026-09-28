@@ -1,13 +1,15 @@
 import {
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
   getCountFromServer,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
-  orderBy,
   query,
+  where,
   serverTimestamp,
   Timestamp,
   updateDoc,
@@ -48,6 +50,10 @@ function contestFromDoc(id: string, data: DocumentData): Contest {
   return {
     id,
     name: data.name ?? 'Contest',
+    joinCode: data.joinCode ?? '',
+    ownerId: data.ownerId ?? '',
+    ownerName: data.ownerName ?? undefined,
+    members: Array.isArray(data.members) ? data.members : [],
     sports: data.sports ?? [],
     games: data.games ?? [],
     rosterSlots: data.rosterSlots ?? [],
@@ -90,13 +96,66 @@ function contestToDoc(contest: Contest): DocumentData {
   };
 }
 
-export function listenContests(onChange: (contests: Contest[]) => void, onError?: (e: Error) => void): Unsubscribe {
-  const q = query(collection(db, CONTESTS), orderBy('lockTime', 'desc'));
+/**
+ * The contests this device can see: the ones it created and the ones it joined
+ * with a code. Nothing lists every contest, so a code is the only way in.
+ *
+ * The sort happens here rather than in the query because ordering an
+ * `array-contains` query by another field would need a composite index, and a
+ * player's list of contests is small.
+ */
+export function listenMyContests(
+  uid: string,
+  onChange: (contests: Contest[]) => void,
+  onError?: (e: Error) => void,
+): Unsubscribe {
+  const q = query(collection(db, CONTESTS), where('members', 'array-contains', uid));
   return onSnapshot(
     q,
-    (snapshot) => onChange(snapshot.docs.map((d) => contestFromDoc(d.id, d.data()))),
+    (snapshot) =>
+      onChange(
+        snapshot.docs
+          .map((d) => contestFromDoc(d.id, d.data()))
+          .sort((a, b) => b.lockTime.localeCompare(a.lockTime)),
+      ),
     (error) => onError?.(error),
   );
+}
+
+/** Six digits, never starting a run of zeros that reads like a typo. */
+function newJoinCode(): string {
+  const bytes = new Uint32Array(1);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  const value = bytes[0] || Math.floor(Math.random() * 0xffffffff);
+  return String(100_000 + (value % 900_000));
+}
+
+/** A code no live contest is already using. */
+async function uniqueJoinCode(database: Firestore = db): Promise<string> {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const code = newJoinCode();
+    const taken = await getDocs(
+      query(collection(database, CONTESTS), where('joinCode', '==', code), limit(1)),
+    );
+    if (taken.empty) return code;
+  }
+  throw new Error('Could not allocate a join code. Try again.');
+}
+
+export async function findContestByJoinCode(code: string): Promise<Contest | null> {
+  const snapshot = await getDocs(
+    query(collection(db, CONTESTS), where('joinCode', '==', code.trim()), limit(1)),
+  );
+  const found = snapshot.docs[0];
+  return found ? contestFromDoc(found.id, found.data()) : null;
+}
+
+/** Add this device to a contest's members, so it appears on their contests page. */
+export async function joinContest(contestId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db, CONTESTS, contestId), {
+    members: arrayUnion(uid),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function listenContest(
@@ -121,13 +180,17 @@ export async function listContestsOnce(database: Firestore = db): Promise<Contes
   return snapshot.docs.map((d) => contestFromDoc(d.id, d.data()));
 }
 
-/* ------------------------------------------------------------------ admin ---- */
+/* ------------------------------------------------- creating and editing ---- */
 
-export interface CreateContestInput extends Omit<Contest, 'id' | 'createdAt' | 'updatedAt' | 'entrantCount'> {
+export interface CreateContestInput
+  extends Omit<Contest, 'id' | 'createdAt' | 'updatedAt' | 'entrantCount' | 'joinCode' | 'members'> {
   players: ContestPlayer[];
 }
 
-/** Create a contest and its player pool. Admin session only. */
+/**
+ * Create a contest and its player pool. Anyone can do this; whoever does
+ * becomes its owner and gets the join code to hand out.
+ */
 export async function createContest(input: CreateContestInput): Promise<string> {
   const { players, ...contest } = input;
   const reference = doc(collection(db, CONTESTS));
@@ -135,6 +198,8 @@ export async function createContest(input: CreateContestInput): Promise<string> 
   const full: Contest = {
     ...contest,
     id: reference.id,
+    joinCode: await uniqueJoinCode(),
+    members: [contest.ownerId],
     entrantCount: 0,
     playerCount: players.length,
     createdAt: now,
@@ -302,9 +367,12 @@ export async function saveEntry(input: SaveEntryInput): Promise<void> {
   };
 
   // One batch, so a user is never entered without appearing in the standings.
+  // Entering also counts as joining, which keeps the contest on their list even
+  // if they arrived by a shared link rather than by typing the code.
   const batch = writeBatch(db);
   batch.set(entryRef, entry);
   batch.set(doc(db, CONTESTS, input.contestId, STANDINGS, input.uid), standing);
+  batch.update(doc(db, CONTESTS, input.contestId), { members: arrayUnion(input.uid) });
   await batch.commit();
 }
 

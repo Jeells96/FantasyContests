@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ContestCard } from '../components/ContestCard';
-import { Empty, Spinner } from '../components/ui';
-import { countEntrants, listenContests } from '../lib/db';
+import { Banner, Empty, Spinner } from '../components/ui';
+import { countEntrants, findContestByJoinCode, joinContest, listenMyContests } from '../lib/db';
 import { deriveStatus } from '../lib/engine/contestState';
 import { enteredContests } from '../lib/identity';
 import { useSession } from '../state/SessionContext';
@@ -15,20 +17,22 @@ const HEADINGS: Record<ContestStatus, string> = {
 };
 
 export function HomePage() {
-  const { identity } = useSession();
+  const { identity, uid } = useSession();
   const [contests, setContests] = useState<Contest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [, setTick] = useState(0);
   const entered = useMemo(() => enteredContests(), []);
 
+  // Only the contests this device started or joined with a code.
   useEffect(
     () =>
-      listenContests(
+      listenMyContests(
+        uid,
         (next) => setContests(next),
         (e) => setError(e.message),
       ),
-    [],
+    [uid],
   );
 
   // Re-render every second so the countdown to lock runs here too, not only on
@@ -39,7 +43,7 @@ export function HomePage() {
   }, []);
 
   // Entry counts come from an aggregation query rather than the contest
-  // document, which only an admin may write, so the number is live for users.
+  // document, so the number is live without anyone writing to the contest.
   useEffect(() => {
     if (!contests || contests.length === 0) return;
     let cancelled = false;
@@ -79,10 +83,17 @@ export function HomePage() {
             {identity ? `Welcome back, ${identity.firstName}` : 'Contests'}
           </h1>
           <p className="muted tiny" style={{ margin: '6px 0 0' }}>
-            One lineup per contest. Salaries, salary caps and cross-sport scoring are calculated
-            automatically from the games in each contest.
+            Start a contest and share its six-digit code, or enter someone else's code to join theirs.
           </p>
         </div>
+
+        <div className="row row--wrap" style={{ gap: 8 }}>
+          <Link to="/new" className="btn btn--primary" style={{ flex: '1 1 160px' }}>
+            + Start a contest
+          </Link>
+        </div>
+
+        <JoinByCode uid={uid} known={contests} />
 
         {error ? <div className="banner banner--bad">{error}</div> : null}
         {contests === null && !error ? <Spinner label="Loading contests…" /> : null}
@@ -90,7 +101,7 @@ export function HomePage() {
         {contests !== null && contests.length === 0 ? (
           <Empty
             title="No contests yet"
-            hint="An admin can create one from the Admin area using today's NFL, MLB or NBA games."
+            hint="Start one with today's NFL, MLB or NBA games, or join a friend's with their code."
           />
         ) : null}
 
@@ -109,6 +120,7 @@ export function HomePage() {
                     key={contest.id}
                     contest={{ ...contest, entrantCount: counts[contest.id] ?? contest.entrantCount }}
                     entered={entered.has(contest.id)}
+                    isOwner={contest.ownerId === uid}
                   />
                 ))}
               </div>
@@ -117,5 +129,70 @@ export function HomePage() {
         })}
       </div>
     </main>
+  );
+}
+
+/** Six digits is the whole door: type a code, land in the contest. */
+function JoinByCode({ uid, known }: { uid: string; known: Contest[] | null }) {
+  const navigate = useNavigate();
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (code.length !== 6 || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Already a member: skip the write and just open it.
+      const mine = known?.find((contest) => contest.joinCode === code);
+      if (mine) {
+        navigate(`/contest/${mine.id}`);
+        return;
+      }
+      const contest = await findContestByJoinCode(code);
+      if (!contest) {
+        setError('No contest has that code. Check the six digits with whoever started it.');
+        return;
+      }
+      // Firestore applies the membership write locally at once and syncs it when
+      // it can, so opening the contest never waits on the round trip.
+      void joinContest(contest.id, uid);
+      navigate(`/contest/${contest.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not join that contest');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card stack" onSubmit={submit} style={{ gap: 10 }}>
+      <div>
+        <div className="label" style={{ margin: 0 }}>
+          Join with a code
+        </div>
+        <div className="tiny faint">Ask whoever started the contest for its six digits.</div>
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <input
+          className="input input--code"
+          value={code}
+          onChange={(event) => {
+            setCode(event.target.value.replace(/\D/g, '').slice(0, 6));
+            setError(null);
+          }}
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="000000"
+          aria-label="Six-digit contest code"
+        />
+        <button type="submit" className="btn btn--primary" disabled={code.length !== 6 || busy}>
+          {busy ? <span className="spinner" /> : 'Join'}
+        </button>
+      </div>
+      {error ? <Banner tone="bad">{error}</Banner> : null}
+    </form>
   );
 }

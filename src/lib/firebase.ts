@@ -19,7 +19,8 @@ const firebaseConfig: FirebaseOptions = {
  * Firestore only — this app uses no Firebase Authentication.
  *
  * Players are identified by a random id generated on their own device (see
- * lib/identity.ts) and the admin area is unlocked by a PIN held in the client.
+ * lib/identity.ts), a contest belongs to the device that created it, and the
+ * settings area is unlocked by a PIN held in the client.
  * Nothing needs to be enabled in the Firebase console beyond Firestore itself,
  * and the security rules do not depend on a signed-in user.
  */
@@ -32,5 +33,5 @@ const app = initializeApp(firebaseConfig);
  */
 export const db: Firestore = initializeFirestore(app, { ignoreUndefinedProperties: true });
 
-/** The admin PIN. Checked in the browser; see README on what that does and does not protect. */
+/** The admin PIN, which guards the default settings only. Checked in the browser. */
 export const ADMIN_PIN = env.VITE_ADMIN_PIN ?? '2325';

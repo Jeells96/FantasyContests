@@ -17,7 +17,7 @@ import type { CaptainRules } from './lineup';
 
 /**
  * Automatic pricing: projections -> cross-sport normalization -> salaries ->
- * salary cap -> contest scoring baseline. The admin supplies games and rules;
+ * salary cap -> contest scoring baseline. The creator supplies games and rules;
  * everything in this module is derived.
  */
 

@@ -237,6 +237,17 @@ export interface ScoringLogEntry {
 export interface Contest {
   id: string;
   name: string;
+  /**
+   * Six digits, shown on the contest and typed by whoever is joining. This is
+   * the only way into a contest: it is not listed anywhere public.
+   */
+  joinCode: string;
+  /** Device id of whoever created the contest; the only one who may edit it. */
+  ownerId: string;
+  /** The creator's name at the time, so a contest can say who runs it. */
+  ownerName?: string;
+  /** Device ids of the creator and everyone who has entered the code. */
+  members: string[];
   sports: Sport[];
   games: ContestGame[];
   rosterSlots: RosterSlot[];
@@ -253,7 +264,7 @@ export interface Contest {
   /** Latest game start (+ slack) used to help decide completion. */
   lastGameStart: string;
   status: ContestStatus;
-  /** Set once an admin/worker has verified every game is final. */
+  /** Set once the owner or the worker has verified every game is final. */
   finalizedAt?: string | null;
   /** When live scoring last ran, used to stop every open tab syncing at once. */
   lastSyncAt?: string | null;

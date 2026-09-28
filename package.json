@@ -12,7 +12,8 @@
     "live-sync": "esbuild scripts/live-sync.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/live-sync.cjs --log-level=error && node scripts/.build/live-sync.cjs",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
     "deploy": "npm run build && firebase deploy",
-    "check:engine": "esbuild scripts/engine-check.ts --bundle --platform=node --format=esm --target=node20 --outfile=scripts/.build/engine-check.mjs --log-level=warning && node scripts/.build/engine-check.mjs"
+    "check:engine": "esbuild scripts/engine-check.ts --bundle --platform=node --format=esm --target=node20 --outfile=scripts/.build/engine-check.mjs --log-level=warning && node scripts/.build/engine-check.mjs",
+    "backfill:codes": "esbuild scripts/backfill-join-codes.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/backfill-join-codes.cjs --log-level=error && node scripts/.build/backfill-join-codes.cjs"
   },
   "dependencies": {
     "firebase": "^11.0.2",

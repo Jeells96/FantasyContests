@@ -23,7 +23,7 @@ export const SCORING_LOG_LIMIT = 80;
 /**
  * Fold a round of live feed results into a contest's games and player pool.
  *
- * Pure so the same code path runs in the admin browser tab and in the headless
+ * Pure so the same code path runs in a browser tab and in the headless
  * worker: raw fantasy points come from the contest's own scoring table, and the
  * normalized contest points are the raw points times the sport's frozen
  * normalization factor. Both are stored.

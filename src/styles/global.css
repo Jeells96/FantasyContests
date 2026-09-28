@@ -1487,3 +1487,172 @@ h4 {
   color: var(--warn);
   font-weight: 900;
 }
+
+/* ---------------------------------------------------------- roster grid --- */
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--rg-cols, 3), minmax(0, 1fr));
+  gap: 6px;
+}
+
+.rg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 7px 6px;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  min-width: 0;
+}
+
+.rg-card--self {
+  border-color: rgba(91, 140, 255, 0.6);
+  background: linear-gradient(180deg, rgba(91, 140, 255, 0.12), var(--bg-elev) 70%);
+}
+
+.rg-card--leader {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.rg-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rg-rank {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--bg-elev-3);
+  font-size: 9.5px;
+  font-weight: 900;
+  color: var(--text-dim);
+}
+
+.rg-card--leader .rg-rank {
+  background: linear-gradient(140deg, #fbbf24, #f59e0b);
+  color: #2a1a00;
+}
+
+.rg-name {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.rg-total {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 17px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.rg-bonus {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.rg-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 1px;
+}
+
+.rg-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 1px 3px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.rg-line--scored {
+  background: rgba(74, 222, 128, 0.16);
+}
+
+.rg-player {
+  /* Block, not flex: text-overflow does not apply inside a flex container, so a
+     long name would clip mid-letter instead of showing an ellipsis. */
+  display: block;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.rg-cpt {
+  margin-right: 3px;
+  color: var(--warn);
+  font-weight: 900;
+  font-size: 9px;
+}
+
+.rg-pts {
+  flex: none;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.rg-delta {
+  margin-left: 2px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.rg-hidden {
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+/* A four-wide grid has to give up some size to stay on one screen. */
+.roster-grid--dense {
+  gap: 4px;
+}
+
+.roster-grid--dense .rg-card {
+  padding: 5px 5px 4px;
+  gap: 2px;
+}
+
+.roster-grid--dense .rg-name {
+  font-size: 9.5px;
+}
+
+.roster-grid--dense .rg-total {
+  font-size: 14px;
+}
+
+.roster-grid--dense .rg-line {
+  font-size: 9px;
+  line-height: 1.25;
+  padding: 0 2px;
+}
+
+.roster-grid--dense .rg-rank {
+  min-width: 13px;
+  height: 13px;
+  font-size: 8.5px;
+}

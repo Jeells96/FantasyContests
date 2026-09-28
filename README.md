@@ -34,7 +34,8 @@ statistical events.
   moment they add points — on your lineup, the leaderboard and the scoring tab alike.
 - A **Scoring** tab with the best lineup the pool currently allows (the perfect lineup once games are final),
   a live feed of every player who scores with tags showing who rosters them, and the pool ranked by points.
-- A leaderboard toggle that opens every entrant's roster at once.
+- A leaderboard toggle that lays every entrant out as a grid of tiles — 3 across for a small group, 4 for a
+  full one — so the whole field fits on one screen without scrolling.
 
 **For admins** (PIN `2325`)
 - Create a contest from any combination of NFL, MLB and NBA games on a date range.

@@ -3,6 +3,7 @@ import type { Contest, LeaderboardRow } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
 import { Empty } from './ui';
+import { RosterGrid } from './RosterGrid';
 
 /**
  * Live leaderboard. Rosters are only ever present in a row once the contest has
@@ -43,8 +44,12 @@ export function LeaderboardList({
         </button>
       )}
 
-      {rows.map((row) => {
-        const open = showAll || expanded === row.uid;
+      {showAll && locked ? <RosterGrid rows={rows} contest={contest} pointDeltas={pointDeltas} /> : null}
+
+      {showAll && locked
+        ? null
+        : rows.map((row) => {
+        const open = expanded === row.uid;
         return (
           <div key={row.uid}>
             <button
@@ -162,7 +167,7 @@ export function LeaderboardList({
             ) : null}
           </div>
         );
-      })}
+          })}
     </div>
   );
 }

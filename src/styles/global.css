@@ -2160,3 +2160,17 @@ h4 {
   flex: 1 1 100%;
   min-width: 0;
 }
+
+.pill__x {
+  margin-left: 5px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pill__x:active {
+  color: var(--bad);
+}

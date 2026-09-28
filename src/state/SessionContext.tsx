@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ADMIN_PIN } from '../lib/firebase';
 import { clearIdentity, deviceId, loadIdentity, saveIdentity, type Identity } from '../lib/identity';
+import { personKey, rememberPerson } from '../lib/people';
 
 const ADMIN_SESSION_KEY = 'fantasycontests.admin.v1';
 
@@ -8,6 +9,8 @@ interface SessionValue {
   /** Random per-device id; owns this device's entries. */
   uid: string;
   identity: Identity | null;
+  /** This person's name reduced to a match key; empty without a name. */
+  personKey: string;
   ready: boolean;
   error: string | null;
   saveName: (firstName: string, lastName: string) => void;
@@ -44,6 +47,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setIdentity(saveIdentity(firstName, lastName));
   }, []);
 
+  // Being known by name is what lets someone be invited to a contest before
+  // they have ever opened the site, and what fills the admin's pool lists.
+  useEffect(() => {
+    if (!identity) return;
+    void rememberPerson(identity.firstName, identity.lastName, uid);
+  }, [identity, uid]);
+
   const forgetName = useCallback(() => {
     clearIdentity();
     setIdentity(null);
@@ -73,6 +83,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({
       uid,
       identity,
+      personKey: identity ? personKey(identity.firstName, identity.lastName) : '',
       ready: true,
       error: null,
       saveName,

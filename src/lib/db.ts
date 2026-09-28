@@ -54,6 +54,8 @@ function contestFromDoc(id: string, data: DocumentData): Contest {
     ownerId: data.ownerId ?? '',
     ownerName: data.ownerName ?? undefined,
     members: Array.isArray(data.members) ? data.members : [],
+    invites: Array.isArray(data.invites) ? data.invites : [],
+    inviteKeys: Array.isArray(data.inviteKeys) ? data.inviteKeys : [],
     sports: data.sports ?? [],
     games: data.games ?? [],
     rosterSlots: data.rosterSlots ?? [],
@@ -141,6 +143,32 @@ async function uniqueJoinCode(database: Firestore = db): Promise<string> {
     if (taken.empty) return code;
   }
   throw new Error('Could not allocate a join code. Try again.');
+}
+
+/**
+ * Contests this person has been invited to by name but has not joined.
+ *
+ * Invitations are matched on the name itself, so somebody who has never opened
+ * the site before still finds their contest waiting the first time they do.
+ */
+export function listenMyInvitations(
+  personKey: string,
+  uid: string,
+  onChange: (contests: Contest[]) => void,
+  onError?: (e: Error) => void,
+): Unsubscribe {
+  const q = query(collection(db, CONTESTS), where('inviteKeys', 'array-contains', personKey));
+  return onSnapshot(
+    q,
+    (snapshot) =>
+      onChange(
+        snapshot.docs
+          .map((d) => contestFromDoc(d.id, d.data()))
+          .filter((contest) => !contest.members.includes(uid))
+          .sort((a, b) => a.lockTime.localeCompare(b.lockTime)),
+      ),
+    (error) => onError?.(error),
+  );
 }
 
 export async function findContestByJoinCode(code: string): Promise<Contest | null> {

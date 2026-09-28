@@ -19,6 +19,9 @@ import { DEFAULT_CAPTAIN_MULTIPLIER } from '../lib/engine/captain';
 import { STATS_BY_SPORT, statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
 import { FALLBACK_DEFAULTS, loadContestDefaults, type ContestDefaults } from '../lib/defaults';
+import { InvitePicker } from '../components/InvitePicker';
+import { canInvite, invitablePeople, loadPeople, type Person } from '../lib/people';
+import type { ContestInvite } from '../types';
 import {
   SPORTS,
   SPORT_LABELS,
@@ -59,7 +62,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 
 export function ContestBuilderPage() {
   const { contestId } = useParams<{ contestId: string }>();
-  const { uid, identity } = useSession();
+  const { uid, identity, personKey: myKey } = useSession();
   const navigate = useNavigate();
   const editing = Boolean(contestId);
 
@@ -86,11 +89,23 @@ export function ContestBuilderPage() {
   const [loaded, setLoaded] = useState(!editing);
   const [existing, setExisting] = useState<Contest | null>(null);
   const [defaults, setDefaults] = useState<ContestDefaults>(FALLBACK_DEFAULTS);
+  const [people, setPeople] = useState<Record<string, Person>>({});
+  const [invites, setInvites] = useState<ContestInvite[]>([]);
 
   const selectedGames = useMemo(
     () => available.filter((game) => selectedIds.includes(game.id)),
     [available, selectedIds],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadPeople().then((next) => {
+      if (!cancelled) setPeople(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* -------------------------------------------------------- house defaults ---- */
   // What a new contest opens with. The creator can change any of it below.
@@ -139,6 +154,7 @@ export function ContestBuilderPage() {
         setCaptainX(contest.captain?.multiplier ?? DEFAULT_CAPTAIN_MULTIPLIER);
         setName(contest.name);
         setNotes(contest.notes ?? '');
+        setInvites(contest.invites ?? []);
         setDate(contest.lockTime.slice(0, 10));
         setLoaded(true);
       } catch (e) {
@@ -247,6 +263,8 @@ export function ContestBuilderPage() {
         status: 'open' as const,
         ownerId: existing?.ownerId || uid,
         ownerName: existing?.ownerName || identity?.displayName || '',
+        invites,
+        inviteKeys: invites.map((invite) => invite.key),
         finalizedAt: null,
         playerCount: pricing.players.length,
         notes: notes.trim(),
@@ -622,6 +640,14 @@ export function ContestBuilderPage() {
                 />
               </div>
             </div>
+
+            {canInvite(people, myKey) ? (
+              <InvitePicker
+                people={invitablePeople(people, myKey)}
+                invites={invites}
+                onChange={setInvites}
+              />
+            ) : null}
 
             {pricing ? (
               <>

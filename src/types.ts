@@ -236,6 +236,14 @@ export interface ScoringLogEntry {
   at: string;
 }
 
+export interface ContestInvite {
+  /** Normalized first and last name; see lib/people.ts. */
+  key: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+}
+
 export interface Contest {
   id: string;
   name: string;
@@ -250,6 +258,10 @@ export interface Contest {
   ownerName?: string;
   /** Device ids of the creator and everyone who has entered the code. */
   members: string[];
+  /** People invited by name, who see the contest without needing the code. */
+  invites?: ContestInvite[];
+  /** The invited people's match keys, so a device can find its invitations. */
+  inviteKeys?: string[];
   sports: Sport[];
   games: ContestGame[];
   rosterSlots: RosterSlot[];

@@ -3,9 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { ContestCard } from '../components/ContestCard';
 import { Banner, Empty, Spinner } from '../components/ui';
-import { countEntrants, findContestByJoinCode, getMyEntry, joinContest, listenMyContests } from '../lib/db';
+import {
+  countEntrants,
+  findContestByJoinCode,
+  getMyEntry,
+  joinContest,
+  listenMyContests,
+  listenMyInvitations,
+} from '../lib/db';
 import { hasSpread } from '../lib/engine/spread';
-import { deriveStatus } from '../lib/engine/contestState';
+import { deriveStatus, formatDateTime } from '../lib/engine/contestState';
+import { rosterSummary } from '../lib/engine/roster';
 import { enteredContests } from '../lib/identity';
 import { useSession } from '../state/SessionContext';
 import type { Contest, ContestStatus } from '../types';
@@ -18,11 +26,12 @@ const HEADINGS: Record<ContestStatus, string> = {
 };
 
 export function HomePage() {
-  const { identity, uid } = useSession();
+  const { identity, uid, personKey } = useSession();
   const [contests, setContests] = useState<Contest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [openPicks, setOpenPicks] = useState<Record<string, number>>({});
+  const [invitations, setInvitations] = useState<Contest[]>([]);
   const [, setTick] = useState(0);
   const entered = useMemo(() => enteredContests(), []);
 
@@ -36,6 +45,12 @@ export function HomePage() {
       ),
     [uid],
   );
+
+  // Contests somebody invited this name to, which need no code.
+  useEffect(() => {
+    if (!personKey) return;
+    return listenMyInvitations(personKey, uid, setInvitations);
+  }, [personKey, uid]);
 
   // Re-render every second so the countdown to lock runs here too, not only on
   // the contest page.
@@ -118,6 +133,20 @@ export function HomePage() {
         </div>
 
         <JoinByCode uid={uid} known={contests} />
+
+        {invitations.length > 0 ? (
+          <section>
+            <div className="section-title">
+              <h2>You're invited</h2>
+              <span className="tiny faint">{invitations.length}</span>
+            </div>
+            <div className="list">
+              {invitations.map((contest) => (
+                <Invitation key={contest.id} contest={contest} uid={uid} />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {error ? <div className="banner banner--bad">{error}</div> : null}
         {contests === null && !error ? <Spinner label="Loading contests…" /> : null}
@@ -219,5 +248,36 @@ function JoinByCode({ uid, known }: { uid: string; known: Contest[] | null }) {
       </div>
       {error ? <Banner tone="bad">{error}</Banner> : null}
     </form>
+  );
+}
+
+/** A contest waiting for this name, joinable without a code. */
+function Invitation({ contest, uid }: { contest: Contest; uid: string }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="card card--tight row row--between" style={{ gap: 10 }}>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ fontWeight: 800, display: 'block' }}>{contest.name}</span>
+        <span className="tiny faint">
+          {contest.ownerName ? `${contest.ownerName} invited you` : 'You have been invited'} ·{' '}
+          {rosterSummary(contest.rosterSlots)} · locks {formatDateTime(contest.lockTime)}
+        </span>
+      </span>
+      <button
+        type="button"
+        className="btn btn--sm btn--primary"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          // The write syncs on its own; opening the contest need not wait.
+          void joinContest(contest.id, uid);
+          navigate(`/contest/${contest.id}`);
+        }}
+      >
+        Join
+      </button>
+    </div>
   );
 }

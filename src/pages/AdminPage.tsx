@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Banner, Spinner } from '../components/ui';
 import { FALLBACK_DEFAULTS, listenContestDefaults, saveContestDefaults, type ContestDefaults } from '../lib/defaults';
+import {
+  forgetPerson,
+  listenPeople,
+  listenPools,
+  savePools,
+  setPersonPools,
+  type Person,
+  type Pool,
+} from '../lib/people';
 import { DEFAULT_ROSTER_SIZE } from '../lib/engine/roster';
 import { useSession } from '../state/SessionContext';
 import type { Sport } from '../types';
@@ -15,7 +24,206 @@ const SPORTS: Sport[] = ['nfl', 'mlb', 'nba'];
  */
 export function AdminPage() {
   const { isAdmin } = useSession();
-  return <main className="page">{isAdmin ? <DefaultsEditor /> : <PinGate />}</main>;
+  return (
+    <main className="page">
+      {isAdmin ? (
+        <div className="stack stack--lg">
+          <PoolsEditor />
+          <DefaultsEditor />
+        </div>
+      ) : (
+        <PinGate />
+      )}
+    </main>
+  );
+}
+
+/**
+ * Pools decide who can invite whom.
+ *
+ * Someone in a pool can invite the other people in it and sees them listed
+ * when they start a contest. Someone in no pool never sees inviting at all and
+ * never appears as an option — and is told nothing about it either way.
+ */
+function PoolsEditor() {
+  const [pools, setPools] = useState<Pool[] | null>(null);
+  const [people, setPeople] = useState<Record<string, Person>>({});
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => listenPools(setPools, (e) => setError(e.message)), []);
+  useEffect(() => listenPeople(setPeople, (e) => setError(e.message)), []);
+
+  async function addPool(event: React.FormEvent) {
+    event.preventDefault();
+    const label = name.trim();
+    if (label === '' || !pools) return;
+    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (id === '' || pools.some((pool) => pool.id === id)) {
+      setError('There is already a pool with that name.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await savePools([...pools, { id, name: label }]);
+      setName('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePool(pool: Pool) {
+    if (!pools) return;
+    if (!window.confirm(`Delete the "${pool.name}" pool? Everyone in it loses invites.`)) return;
+    setBusy(true);
+    try {
+      await savePools(pools.filter((entry) => entry.id !== pool.id));
+      // Leave nobody pointing at a pool that no longer exists.
+      for (const person of Object.values(people)) {
+        if (person.pools.includes(pool.id)) {
+          await setPersonPools(person.key, person.pools.filter((id) => id !== pool.id));
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggle(person: Person, poolId: string) {
+    const next = person.pools.includes(poolId)
+      ? person.pools.filter((id) => id !== poolId)
+      : [...person.pools, poolId];
+    setBusy(true);
+    setError(null);
+    try {
+      await setPersonPools(person.key, next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const roster = Object.values(people).sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  return (
+    <div className="stack">
+      <div>
+        <div className="eyebrow">Admin</div>
+        <h1 style={{ fontSize: 22, fontWeight: 900 }}>Pools and invites</h1>
+        <p className="tiny muted" style={{ margin: '6px 0 0' }}>
+          People in a pool can invite each other to contests and see each other listed. Anyone not in a pool
+          never sees the invite option and never appears as one — nothing tells them either way. Everyone can
+          still start contests and share them by code.
+        </p>
+      </div>
+
+      {error ? <Banner tone="bad">{error}</Banner> : null}
+
+      <div className="card stack">
+        <div className="label" style={{ margin: 0 }}>
+          Pools
+        </div>
+        <div className="row row--wrap" style={{ gap: 6 }}>
+          {(pools ?? []).map((pool) => (
+            <span key={pool.id} className="pill">
+              {pool.name}
+              <button
+                type="button"
+                className="pill__x"
+                disabled={busy}
+                onClick={() => void removePool(pool)}
+                aria-label={`Delete ${pool.name}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          {pools !== null && pools.length === 0 ? <span className="tiny faint">No pools yet.</span> : null}
+        </div>
+        <form className="row" style={{ gap: 8 }} onSubmit={addPool}>
+          <input
+            className="input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Friends and family"
+            aria-label="New pool name"
+          />
+          <button type="submit" className="btn btn--sm btn--primary" disabled={busy || name.trim() === ''}>
+            Add
+          </button>
+        </form>
+      </div>
+
+      <div className="card stack">
+        <div className="row row--between">
+          <div className="label" style={{ margin: 0 }}>
+            People who have used the site
+          </div>
+          <span className="tiny faint">{roster.length}</span>
+        </div>
+        {roster.length === 0 ? (
+          <p className="tiny faint" style={{ margin: 0 }}>
+            Nobody yet. A name appears here the first time someone enters it.
+          </p>
+        ) : (
+          <div className="list">
+            {roster.map((person) => (
+              <div className="card card--tight" key={person.key}>
+                <div className="row row--between" style={{ gap: 8 }}>
+                  <span style={{ fontWeight: 800, minWidth: 0 }}>
+                    {person.displayName}
+                    <button
+                      type="button"
+                      className="pill__x"
+                      disabled={busy}
+                      title="Remove this name from the list"
+                      onClick={() => {
+                        if (window.confirm(`Remove ${person.displayName} from the list?`)) {
+                          void forgetPerson(person.key);
+                        }
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                  <span className="tiny faint">
+                    {person.pools.length === 0
+                      ? 'no pool'
+                      : person.pools
+                          .map((id) => (pools ?? []).find((pool) => pool.id === id)?.name ?? id)
+                          .join(' · ')}
+                  </span>
+                </div>
+                <div className="row row--wrap" style={{ gap: 6, marginTop: 8 }}>
+                  {(pools ?? []).map((pool) => (
+                    <button
+                      key={pool.id}
+                      type="button"
+                      className={`btn btn--sm${person.pools.includes(pool.id) ? ' btn--primary' : ''}`}
+                      disabled={busy}
+                      onClick={() => void toggle(person, pool.id)}
+                    >
+                      {pool.name}
+                    </button>
+                  ))}
+                  {(pools ?? []).length === 0 ? (
+                    <span className="tiny faint">Add a pool above first.</span>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function PinGate() {
@@ -124,7 +332,7 @@ function DefaultsEditor() {
       <div className="row row--between">
         <div>
           <div className="eyebrow">Admin</div>
-          <h1 style={{ fontSize: 22, fontWeight: 900 }}>Default settings</h1>
+          <h2 style={{ fontSize: 20, fontWeight: 900 }}>Default settings</h2>
         </div>
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => void lockAdmin()}>
           Lock admin

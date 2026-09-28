@@ -4,6 +4,7 @@ import { normalizationFactor } from '../lib/engine/normalization';
 import { statMeta } from '../lib/stats';
 import { formatMoney } from '../lib/engine/lineup';
 import { KeyValue, Sheet, SportPill } from './ui';
+import { SPORT_LABELS } from '../types';
 
 /** Full detail for one player, including how their fantasy points were built. */
 export function PlayerSheet({
@@ -51,6 +52,13 @@ export function PlayerSheet({
         </div>
         {liveRows.length > 0 ? (
           <table className="table-mini" style={{ marginTop: 8 }}>
+            <thead>
+              <tr>
+                <th>Stat</th>
+                <th className="num">In this game</th>
+                <th className="num">Points</th>
+              </tr>
+            </thead>
             <tbody>
               {liveRows.map((row) => (
                 <tr key={row.key}>
@@ -63,7 +71,7 @@ export function PlayerSheet({
                 </tr>
               ))}
               <tr className="table-mini__total">
-                <td>{player.sport === 'nfl' ? 'Total' : 'Raw total'}</td>
+                <td>{player.sport === 'nfl' ? 'Total' : `${SPORT_LABELS[player.sport]} points`}</td>
                 <td />
                 <td className="num">{round1(liveRaw)}</td>
               </tr>
@@ -85,9 +93,12 @@ export function PlayerSheet({
 
       <div className="card card--tight">
         <KeyValue label="Salary" value={formatMoney(player.salary)} />
-        <KeyValue label="Projected (contest points)" value={player.projection.normalized.toFixed(1)} />
+        <KeyValue label="Projected for this game" value={`${player.projection.normalized.toFixed(1)} pts`} />
         {player.sport !== 'nfl' ? (
-          <KeyValue label="Projected (raw sport points)" value={player.projection.raw.toFixed(1)} />
+          <KeyValue
+          label={`Projected (${SPORT_LABELS[player.sport]} points)`}
+          value={player.projection.raw.toFixed(1)}
+        />
         ) : null}
         <KeyValue label="Games played (season)" value={player.gamesPlayed ?? 0} />
       </div>
@@ -95,9 +106,20 @@ export function PlayerSheet({
       {seasonRows.length > 0 ? (
         <>
           <div className="section-title" style={{ marginTop: 16 }}>
-            <h2 style={{ fontSize: 14 }}>Season per game</h2>
+            <h2 style={{ fontSize: 14 }}>Last season, per game</h2>
           </div>
+          <p className="tiny faint" style={{ margin: '0 0 8px' }}>
+            What they averaged per game, and what that average would have been worth under this contest's
+            scoring. It is their form, not a forecast of today.
+          </p>
           <table className="table-mini">
+            <thead>
+              <tr>
+                <th>Stat</th>
+                <th className="num">Per game</th>
+                <th className="num">Points</th>
+              </tr>
+            </thead>
             <tbody>
               {seasonRows.map((row) => (
                 <tr key={row.key}>

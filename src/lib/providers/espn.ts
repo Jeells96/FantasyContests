@@ -159,6 +159,14 @@ const CONFIGS: Partial<Record<Sport, EspnSportConfig>> = { nfl: NFL_CONFIG, nba:
 /** How many recent plays are carried for attributing score changes. */
 const PLAY_WINDOW = 60;
 
+/** ESPN pays a field goal by how far it was. */
+function fieldGoalBand(yards: number): string {
+  if (yards >= 60) return 'fgMade60';
+  if (yards >= 50) return 'fgMade50_59';
+  if (yards >= 40) return 'fgMade40_49';
+  return 'fgMade0_39';
+}
+
 const DST_BASELINE: StatMap = { dstSack: 2.4, dstInt: 0.75, dstFumRec: 0.55, dstTD: 0.15 };
 
 interface EspnCategory {
@@ -535,6 +543,13 @@ export class EspnProvider implements SportProvider {
       this.addTeamDefenseStats(summary, game, players, { homeScore, awayScore });
     }
 
+    // The whole feed, not just the tail: a first-quarter field goal still has
+    // to count in the fourth.
+    const allPlays = this.readPlays(summary, { homeScore, awayScore });
+    if (this.sport === 'nfl') {
+      this.addPlayDerivedStats(summary, allPlays, players);
+    }
+
     for (const [id, stats] of Object.entries(players)) {
       players[id] = applyDerivedStats(this.sport, stats);
     }
@@ -548,7 +563,7 @@ export class EspnProvider implements SportProvider {
       winnerTeamId,
       players,
       situation: this.readSituation(summary, status, { homeScore, awayScore }),
-      plays: this.readPlays(summary, { homeScore, awayScore }),
+      plays: allPlays.slice(-PLAY_WINDOW),
     };
   }
 
@@ -635,7 +650,7 @@ export class EspnProvider implements SportProvider {
       return true;
     });
 
-    return unique.slice(-PLAY_WINDOW).map((play, index) => {
+    return unique.map((play, index) => {
       const period = Number(play?.period?.number ?? 0);
       const clock = String(play?.clock?.displayValue ?? '').trim();
       const down = Number(play?.start?.down ?? 0);
@@ -660,6 +675,71 @@ export class EspnProvider implements SportProvider {
         turnover: play?.isTurnover === true,
       } satisfies GamePlay;
     });
+  }
+
+  /**
+   * Field goal distances and two-point conversions, read off the play text.
+   *
+   * Neither appears in the box score: it gives a kicker "4/4" with no distances,
+   * and no two-point column at all. ESPN pays field goals by distance and two
+   * points for a conversion, so both are counted here from the words the feed
+   * uses for them.
+   */
+  private addPlayDerivedStats(summary: any, plays: GamePlay[], players: Record<string, StatMap>): void {
+    const byName = this.athleteIdsByShortName(summary);
+    if (byName.size === 0) return;
+
+    const add = (shortName: string | undefined, key: string, amount = 1): void => {
+      const id = shortName ? byName.get(shortName.replace(/\s+/g, '').toLowerCase()) : undefined;
+      if (!id) return;
+      const stats = (players[id] ??= {});
+      stats[key] = (stats[key] ?? 0) + amount;
+    };
+
+    for (const play of plays) {
+      const text = play.text ?? '';
+      if (text === '') continue;
+
+      const goal = /([A-Z]\.[A-Za-z'\-.]+)\s+(\d+)\s+yard field goal is\s+GOOD/i.exec(text);
+      if (goal) {
+        add(goal[1], fieldGoalBand(Number(goal[2])));
+      }
+
+      // Only a conversion that actually worked is worth points.
+      const conversion = text.indexOf('TWO-POINT CONVERSION ATTEMPT');
+      if (conversion >= 0 && /ATTEMPT SUCCEEDS/i.test(text)) {
+        const attempt = text.slice(conversion);
+        const pass = /([A-Z]\.[A-Za-z'\-.]+)\s+pass to\s+([A-Z]\.[A-Za-z'\-.]+)/i.exec(attempt);
+        if (pass) {
+          add(pass[1], 'twoPt');
+          add(pass[2], 'twoPt');
+        } else {
+          const run = /([A-Z]\.[A-Za-z'\-.]+)\s+(?:rushes|runs|up the middle|left|right)/i.exec(attempt);
+          if (run) add(run[1], 'twoPt');
+        }
+      }
+    }
+  }
+
+  /** "H.Mevis" -> athlete id, in the form the play text writes names. */
+  private athleteIdsByShortName(summary: any): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const team of (summary?.boxscore?.players ?? []) as any[]) {
+      for (const category of (team?.statistics ?? []) as any[]) {
+        for (const row of (category?.athletes ?? []) as any[]) {
+          const athlete = row?.athlete;
+          const id = String(athlete?.id ?? '');
+          const full = String(athlete?.displayName ?? '').trim();
+          if (!id || full === '') continue;
+          const parts = full.split(/\s+/);
+          if (parts.length < 2) continue;
+          const key = `${parts[0][0]}.${parts.slice(1).join('')}`.replace(/\s+/g, '').toLowerCase();
+          // First writer wins, so a duplicate abbreviation never reassigns.
+          if (!map.has(key)) map.set(key, id);
+        }
+      }
+    }
+    return map;
   }
 
   /**

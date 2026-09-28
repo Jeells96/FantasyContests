@@ -142,7 +142,7 @@ export function ScoringTab({
             <div className="list">
               {(showAllFeed ? log : log.slice(0, FEED_PREVIEW)).map((event) => (
                 <div className={`feed feed--compact${event.delta < 0 ? ' feed--down' : ''}`} key={event.id}>
-                  <span className="feed__shot">
+                  <span className="feed__shot" data-sport={event.sport}>
                     {event.headshot ? (
                       <img src={event.headshot} alt="" loading="lazy" />
                     ) : (
@@ -206,7 +206,7 @@ export function ScoringTab({
                   className={`feed${delta > 0 ? ' feed--scored' : ''}${delta < 0 ? ' feed--down' : ''}`}
                   key={player.id}
                 >
-                  <span className="feed__shot">
+                  <span className="feed__shot" data-sport={player.sport}>
                     {player.headshot ? (
                       <img src={player.headshot} alt="" loading="lazy" />
                     ) : (

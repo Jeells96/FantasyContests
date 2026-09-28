@@ -132,9 +132,6 @@ export function LeaderboardList({
                               }
                             />
                           ) : null}
-                          {line.player && line.player.sport !== 'nfl' ? (
-                            <div className="tiny faint">raw {line.rawPoints.toFixed(1)}</div>
-                          ) : null}
                         </span>
                       </div>
                     ))}

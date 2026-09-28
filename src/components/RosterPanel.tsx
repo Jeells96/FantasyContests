@@ -73,7 +73,7 @@ export function RosterPanel({
 
               {player ? (
                 <>
-                  <span className={`player__shot${player.isTeamUnit ? ' player__shot--unit' : ''}`} style={{ width: 34, height: 34 }}>
+                  <span className={`player__shot${player.isTeamUnit ? ' player__shot--unit' : ''}`} data-sport={player.sport} style={{ width: 34, height: 34 }}>
                     {player.headshot ? <img src={player.headshot} alt="" loading="lazy" /> : <Initials name={player.name} />}
                   </span>
                   <span style={{ minWidth: 0, flex: 1 }}>

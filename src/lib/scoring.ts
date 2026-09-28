@@ -21,10 +21,16 @@ export const DEFAULT_NFL_SCORING: SportScoring = {
     recTD: 6,
     fumLost: -2,
     twoPt: 2,
-    fgMade: 3,
+    // ESPN pays field goals by distance; fgMade itself is left at zero so a
+    // kicker is never counted twice.
+    fgMade: 0,
+    fgMade0_39: 3,
+    fgMade40_49: 4,
+    fgMade50_59: 5,
+    fgMade60: 6,
     fgMissed: -1,
     xpMade: 1,
-    xpMissed: -1,
+    xpMissed: 0,
     krTD: 6,
     prTD: 6,
     dstSack: 1,
@@ -35,14 +41,16 @@ export const DEFAULT_NFL_SCORING: SportScoring = {
     dstBlockedKick: 2,
   },
   tiers: {
+    // ESPN's own points-allowed ladder.
     dstPtsAllowed: [
-      { min: 0, max: 0, points: 10 },
-      { min: 1, max: 6, points: 7 },
-      { min: 7, max: 13, points: 4 },
-      { min: 14, max: 20, points: 1 },
-      { min: 21, max: 27, points: 0 },
+      { min: 0, max: 0, points: 5 },
+      { min: 1, max: 6, points: 4 },
+      { min: 7, max: 13, points: 3 },
+      { min: 14, max: 17, points: 1 },
+      { min: 18, max: 27, points: 0 },
       { min: 28, max: 34, points: -1 },
-      { min: 35, max: null, points: -4 },
+      { min: 35, max: 45, points: -3 },
+      { min: 46, max: null, points: -5 },
     ],
   },
 };

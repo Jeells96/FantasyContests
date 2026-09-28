@@ -58,7 +58,6 @@ export function PlayerCard({
     .filter(Boolean)
     .join(' ');
 
-  const showRaw = player.sport !== 'nfl' && (player.rawPoints ?? 0) !== (player.normalizedPoints ?? 0);
 
   return (
     <div className={classes}>
@@ -69,7 +68,7 @@ export function PlayerCard({
         className="row"
         style={{ gap: 11, flex: 1, minWidth: 0, background: 'none', padding: 0, textAlign: 'left' }}
       >
-        <span className={`player__shot${player.isTeamUnit ? ' player__shot--unit' : ''}`}>
+        <span className={`player__shot${player.isTeamUnit ? ' player__shot--unit' : ''}`} data-sport={player.sport}>
           {player.headshot ? (
             <img
               src={player.headshot}
@@ -94,7 +93,13 @@ export function PlayerCard({
             <span className="pos-tag">{player.position}</span>
             {player.teamAbbr} {player.isHome ? 'vs' : '@'} {player.opponentAbbr}
           </span>
-          {player.statLine ? <span className="player__stats">{player.statLine}</span> : null}
+          {player.statLine ? (
+            <span className="player__stats">
+              {/* Before kickoff this is last season's average, not a forecast of today. */}
+              {live ? null : <span className="stat-tag">avg</span>}
+              {player.statLine}
+            </span>
+          ) : null}
         </span>
       </button>
 
@@ -106,10 +111,10 @@ export function PlayerCard({
               {points.toFixed(1)} pts
               <DeltaBadge value={shownDelta} />
             </span>
-            {showRaw ? <span className="player__proj">raw {(player.rawPoints ?? 0).toFixed(1)}</span> : null}
+
           </>
         ) : (
-          <span className="player__proj">proj {projection.toFixed(1)}</span>
+          <span className="player__proj">proj {projection.toFixed(1)} pts</span>
         )}
         {onInfo ? (
           <button type="button" className="btn btn--sm btn--ghost" style={{ minHeight: 22, padding: '0 4px' }} onClick={onInfo}>

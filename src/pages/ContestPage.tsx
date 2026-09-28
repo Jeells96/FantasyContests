@@ -154,19 +154,15 @@ export function ContestPage() {
   const usedPlayerIds = new Set(lineup.map((line) => line.playerId));
 
   /**
-   * One control, three states: tap to roster a player, tap again to make them
-   * captain, tap a third time to drop them.
+   * Tap to roster a player, tap again to drop them. Nothing else, so dropping
+   * someone can never fail and can never disturb the captain: the captain is
+   * chosen on the roster itself.
    */
   function assignPlayer(player: ContestPlayer) {
     if (!contest || locked) return;
     setMessage(null);
 
-    const existing = lineup.find((line) => line.playerId === player.id);
-    if (existing) {
-      if (hasCaptain && !existing.captain) {
-        promoteToCaptain(existing.slotId, player);
-        return;
-      }
+    if (lineup.some((line) => line.playerId === player.id)) {
       setLineup((current) => current.filter((line) => line.playerId !== player.id));
       return;
     }
@@ -805,22 +801,13 @@ function HowItWorks({
       </div>
       <ul className="howto__list">
         <li>
-          <strong>Tap a player</strong> to add them to your roster.
-          {hasCaptain ? (
-            <>
-              {' '}
-              <strong>Tap again</strong> to make them your <span className="cpt-badge">CPT</span>.{' '}
-              <strong>Tap a third time</strong> to drop them.
-            </>
-          ) : (
-            <> Tap them again to drop them.</>
-          )}
+          <strong>Tap a player</strong> to add them to your roster, and tap them again to drop them.
         </li>
         {hasCaptain ? (
           <li>
-            Your <strong>captain scores {multiplier}× points</strong> — and costs{' '}
-            <strong>{multiplier}× salary</strong>. Exactly one captain per roster, shown at the top of your
-            lineup.
+            Pick your captain on the roster itself: every spot you have filled has a{' '}
+            <strong>make captain</strong> button. Your <strong>captain scores {multiplier}× points</strong>{' '}
+            and costs <strong>{multiplier}× salary</strong> — one per roster, shown at the top of your lineup.
           </li>
         ) : null}
         <li>

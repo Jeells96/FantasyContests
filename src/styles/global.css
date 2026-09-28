@@ -2018,3 +2018,42 @@ h4 {
   border-top: 1px solid var(--line);
   font-weight: 900;
 }
+
+/*
+ * Baseball headshots are portraits with the face already centred, unlike the
+ * wide ESPN crops, so the default top alignment cuts them off.
+ */
+.player__shot[data-sport='mlb'] img,
+.feed__shot[data-sport='mlb'] img {
+  object-position: center 22%;
+}
+
+.table-mini thead th {
+  padding-bottom: 4px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: left;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.table-mini thead th.num {
+  text-align: right;
+}
+
+/* Marks a stat line as form rather than a forecast of today's game. */
+.stat-tag {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg-elev-3);
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}

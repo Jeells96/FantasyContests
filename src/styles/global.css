@@ -102,9 +102,10 @@ h4 {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: rgba(8, 12, 24, 0.86);
-  backdrop-filter: blur(14px);
+  /* Opaque for the same reason as the footer: see .salarybar. */
+  background: #080c18;
   border-bottom: 1px solid var(--line-soft);
+  transform: translateZ(0);
 }
 
 .appbar__title {
@@ -695,9 +696,16 @@ h4 {
   z-index: 30;
   margin: 0 -16px;
   padding: 10px 16px calc(10px + var(--safe-bottom));
-  background: rgba(8, 12, 24, 0.94);
-  backdrop-filter: blur(14px);
+  /*
+   * Opaque, and on its own compositing layer. A translucent backdrop-filter
+   * behind a sticky bar whose numbers keep changing leaves stale pixels painted
+   * on iOS Safari, which shows up as figures overlapping each other until the
+   * page is scrolled and the layer is forced to repaint.
+   */
+  background: #080c18;
   border-top: 1px solid var(--line);
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .salarybar__grid {

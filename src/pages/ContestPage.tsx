@@ -10,6 +10,7 @@ import { ScoreOverlay } from '../components/ScoreOverlay';
 import { Banner, Empty, KeyValue, Spinner, SportPill, StatusPill } from '../components/ui';
 import { useContestData } from '../hooks/useContestData';
 import { useScoringEvents } from '../hooks/useScoringEvents';
+import { useLiveSync } from '../hooks/useLiveSync';
 import { saveEntry } from '../lib/db';
 import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
 import { buildLeaderboard } from '../lib/engine/leaderboard';
@@ -51,6 +52,8 @@ export function ContestPage() {
     setLineup(myEntry.lineup ?? []);
     setPicks(myEntry.picks ?? {});
     if (myEntry.teamName) setTeamName(myEntry.teamName);
+    // Already entered, so open on the standings rather than the builder.
+    setTab('board');
     setHydrated(true);
   }, [myEntry, hydrated]);
 
@@ -65,6 +68,8 @@ export function ContestPage() {
     [myEntry, lineup],
   );
   const { events } = useScoringEvents(contest, players, myPlayerIds, locked && status !== 'complete');
+  // Anyone watching a live contest keeps its scores moving.
+  useLiveSync(contest, status === 'live');
 
   const cap = contest?.salaryCapInfo.cap ?? 0;
   const hasCaptain = captainEnabled(contest);

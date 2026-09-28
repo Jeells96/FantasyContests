@@ -137,7 +137,11 @@ npm run deploy   # build + deploy hosting, rules and indexes
 
 ## Live scoring
 
-Something has to be running to poll the feeds and publish scores. Either:
+**Normally nothing has to be running.** While a contest is live, whichever browsers have its page open take
+turns polling the feeds and writing the results back, coordinating through the contest's `lastSyncAt` so they
+do not all poll at once. Scoring therefore keeps moving whenever a single participant is watching.
+
+The two manual options remain, for a contest nobody happens to have open:
 
 **From the browser** — Admin → a contest → *Live scoring* → *Start auto-sync*, and leave the tab open.
 
@@ -321,8 +325,9 @@ so a misconfiguration shows up as a red build rather than a blank page.
 
 ## Known limitations
 
-- **Live scoring needs something running** (an admin browser tab or the worker) to poll the feeds. A Cloud
-  Function on the Blaze plan would be the natural next step.
+- **Live scoring rides on open browsers.** Any tab viewing a live contest drives the polling, so scores only
+  stall if nobody is watching and neither the admin tab nor the worker is running. A Cloud Function on the
+  Blaze plan would make it fully independent.
 - **Two-point conversions** are not in ESPN's live box score, so they score from season data only.
 - **NFL D/ST projections** are estimates from the game's implied point total plus league-average takeaway
   rates, not team-by-team defensive splits; blocked kicks are not detected live.

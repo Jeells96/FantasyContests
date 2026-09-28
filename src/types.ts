@@ -214,6 +214,8 @@ export interface Contest {
   status: ContestStatus;
   /** Set once an admin/worker has verified every game is final. */
   finalizedAt?: string | null;
+  /** When live scoring last ran, used to stop every open tab syncing at once. */
+  lastSyncAt?: string | null;
   results?: ContestResultsEntry[];
   playerCount: number;
   entrantCount: number;

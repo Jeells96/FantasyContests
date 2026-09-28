@@ -4,21 +4,27 @@ import { deriveStatus, formatCountdown, formatDateTime } from '../lib/engine/con
 import { rosterSummary } from '../lib/engine/roster';
 import { formatMoney } from '../lib/engine/lineup';
 import { SportPill, StatusPill } from './ui';
+import { JoinCode } from './JoinCode';
+import { OwnerControls } from './OwnerControls';
 
 export function ContestCard({
   contest,
   entered,
   isOwner,
+  openPicks = 0,
 }: {
   contest: Contest;
   entered: boolean;
   isOwner: boolean;
+  /** Spread picks whose line has posted but which this device has not made. */
+  openPicks?: number;
 }) {
   const status = deriveStatus(contest);
   const untilLock = Date.parse(contest.lockTime) - Date.now();
 
   return (
-    <Link to={`/contest/${contest.id}`} className="card card--interactive" style={{ color: 'inherit', display: 'block' }}>
+    <div className="card card--interactive" style={{ color: 'inherit' }}>
+      <Link to={`/contest/${contest.id}`} style={{ color: 'inherit', display: 'block' }}>
       <div className="row row--between" style={{ alignItems: 'flex-start', gap: 8 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em' }}>{contest.name}</div>
@@ -28,18 +34,14 @@ export function ContestCard({
             ))}
             <span className="pill">{contest.games.length} games</span>
             {entered ? <span className="pill pill--open">ENTERED</span> : null}
+            {openPicks > 0 ? (
+              <span className="pill pill--alert">
+                {openPicks} PICK{openPicks === 1 ? '' : 'S'} TO MAKE
+              </span>
+            ) : null}
           </div>
         </div>
         <StatusPill status={status} />
-      </div>
-
-      {/* The code lives on the card so nobody has to remember it to invite someone. */}
-      <div className="joincode joincode--inline" style={{ marginTop: 10 }}>
-        <span className="joincode__label">Code</span>
-        <span className="joincode__digits">{contest.joinCode || '——————'}</span>
-        <span className="joincode__who tiny faint">
-          {isOwner ? 'You started this' : contest.ownerName ? `${contest.ownerName}'s contest` : ''}
-        </span>
       </div>
 
       <div className="divider" style={{ marginTop: 12 }} />
@@ -74,7 +76,14 @@ export function ContestCard({
           </span>
         ))}
         {contest.games.length > 6 ? <span className="pill">+{contest.games.length - 6}</span> : null}
+        </div>
+      </Link>
+
+      {/* Outside the link: sharing and managing are not "open the contest". */}
+      <div className="card__footer">
+        <JoinCode contest={contest} compact />
+        {isOwner ? <OwnerControls contest={contest} /> : null}
       </div>
-    </Link>
+    </div>
   );
 }

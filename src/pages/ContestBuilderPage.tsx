@@ -4,7 +4,7 @@ import { Banner, Empty, KeyValue, Sheet, Spinner, SportPill, Toggle } from '../c
 import { createContest, getContest, getPool, updateContest } from '../lib/db';
 import { buildPlayerPool, listGamesRange, type ProviderGame } from '../lib/providers';
 import { withSpreads } from '../lib/providers/odds';
-import { earliestStart, formatGameTime, latestStart } from '../lib/engine/contestState';
+import { deriveStatus, earliestStart, formatGameTime, latestStart } from '../lib/engine/contestState';
 import { formatMoney } from '../lib/engine/lineup';
 import { gameWinnerBonusPoints, priceContest, type PricingResult } from '../lib/engine/pricing';
 import {
@@ -286,6 +286,17 @@ export function ContestBuilderPage() {
       return (
         <main className="page">
           <Empty title="Could not load contest" hint={error ?? 'Check your connection and try again.'} />
+        </main>
+      );
+    }
+    // Once the first game kicks off the rules are what everyone played by.
+    if (deriveStatus(existing) !== 'open') {
+      return (
+        <main className="page">
+          <Empty
+            title="Settings are locked"
+            hint="This contest has started, so its games, roster and scoring can no longer be changed."
+          />
         </main>
       );
     }

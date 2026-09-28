@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { Contest } from '../types';
 
+/** The link that joins someone straight into the contest. */
+export function inviteLink(contest: Contest): string {
+  const base = `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/+$/, '');
+  return `${base}/contest/${contest.id}?j=${contest.joinCode}`;
+}
+
 /**
- * The contest's six digits, spelled out where everyone can see them. Sharing a
- * contest means reading this out or tapping Copy — there is nothing to memorize
- * and no link that would let a stranger in on its own.
+ * The contest's six digits and a way to pass them on.
+ *
+ * Share hands over a link that joins the contest on open, so nobody has to type
+ * the code; the digits stay on screen for anyone being told them out loud.
  */
-export function JoinCode({ contest, canShare = true }: { contest: Contest; canShare?: boolean }) {
+export function JoinCode({ contest, compact = false }: { contest: Contest; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -17,15 +24,15 @@ export function JoinCode({ contest, canShare = true }: { contest: Contest; canSh
 
   if (!contest.joinCode) return null;
 
-  async function copy() {
-    const text = `Join "${contest.name}" on Fantasy Contests with code ${contest.joinCode}`;
+  async function share() {
+    const link = inviteLink(contest);
+    const text = `Join "${contest.name}" on Fantasy Contests`;
     try {
-      // The share sheet is the natural way to send this from a phone.
-      if (canShare && navigator.share) {
-        await navigator.share({ text });
+      if (navigator.share) {
+        await navigator.share({ title: contest.name, text, url: link });
         return;
       }
-      await navigator.clipboard.writeText(contest.joinCode);
+      await navigator.clipboard.writeText(link);
       setCopied(true);
     } catch {
       // Dismissed share sheet or blocked clipboard: the digits are on screen.
@@ -33,11 +40,19 @@ export function JoinCode({ contest, canShare = true }: { contest: Contest; canSh
   }
 
   return (
-    <div className="joincode">
-      <span className="joincode__label">Join code</span>
-      <span className="joincode__digits joincode__digits--lg">{contest.joinCode}</span>
-      <button type="button" className="btn btn--sm btn--ghost joincode__copy" onClick={() => void copy()}>
-        {copied ? 'Copied ✓' : 'Share'}
+    <div className={`joincode${compact ? ' joincode--inline' : ''}`}>
+      <span className="joincode__label">Code</span>
+      <span className={`joincode__digits${compact ? '' : ' joincode__digits--lg'}`}>{contest.joinCode}</span>
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost joincode__copy"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void share();
+        }}
+      >
+        {copied ? 'Link copied ✓' : 'Share link'}
       </button>
     </div>
   );

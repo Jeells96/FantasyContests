@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { GamePicks } from '../components/GamePicks';
 import { LeaderboardList } from '../components/LeaderboardList';
 import { PlayerCard } from '../components/PlayerCard';
@@ -14,18 +14,19 @@ import { usePointDeltas } from '../hooks/usePointDeltas';
 import { ScoringTab } from '../components/ScoringTab';
 import { ScoreStrip } from '../components/ScoreStrip';
 import { useLiveSync } from '../hooks/useLiveSync';
-import { deleteContest, patchContest, saveEntry } from '../lib/db';
-import { deriveStatus, formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
+import { usePendingSpreads } from '../hooks/usePendingSpreads';
+import { joinContest, saveEntry } from '../lib/db';
+import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
 import { buildLeaderboard } from '../lib/engine/leaderboard';
 import { formatMoney, validateEntry } from '../lib/engine/lineup';
+import { hasSpread } from '../lib/engine/spread';
 import { isEligible, rosterSummary } from '../lib/engine/roster';
 import { markEntered, teamNameFor } from '../lib/identity';
 import { generateTeamName } from '../lib/teamName';
 import { captainEnabled, captainMultiplier, captainPremium } from '../lib/engine/captain';
 import { statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
-import { JoinCode } from '../components/JoinCode';
-import { SPORT_LABELS, type Contest, type ContestPlayer, type LineupSelection, type Sport } from '../types';
+import { SPORT_LABELS, type ContestPlayer, type LineupSelection, type Sport } from '../types';
 
 type Tab = 'lineup' | 'board' | 'scoring' | 'info';
 type SortKey = 'salary' | 'projection' | 'points';
@@ -49,6 +50,7 @@ export function ContestPage() {
   const [hydrated, setHydrated] = useState(false);
   const [teamName, setTeamName] = useState<string>('');
   const picksRef = useRef<HTMLDivElement | null>(null);
+  const [query, setQuery] = useSearchParams();
 
   // Adopt the saved entry once, then let local edits stand.
   useEffect(() => {
@@ -74,6 +76,21 @@ export function ContestPage() {
   const { events } = useScoringEvents(contest, players, myPlayerIds, locked && status !== 'complete');
   // Anyone watching a live contest keeps its scores moving.
   const liveSync = useLiveSync(contest, status === 'live');
+  usePendingSpreads(contest, status === 'open');
+
+  /**
+   * A shared link carries the join code, so following one puts you in the
+   * contest without typing anything. The code is dropped from the address bar
+   * afterwards so a refresh does not try again.
+   */
+  useEffect(() => {
+    const invite = query.get('j');
+    if (!invite || !contest || invite !== contest.joinCode) return;
+    if (!contest.members.includes(uid)) void joinContest(contest.id, uid);
+    const next = new URLSearchParams(query);
+    next.delete('j');
+    setQuery(next, { replace: true });
+  }, [query, contest, uid, setQuery]);
   // Who just scored, shown everywhere a player appears.
   const pointDeltas = usePointDeltas(players, locked);
 
@@ -105,8 +122,13 @@ export function ContestPage() {
   }, [contest, standings, entries, myEntry, playersById, uid, locked]);
 
   const rosterComplete = Boolean(validation && validation.filledSlots === contest?.rosterSlots.length);
-  const picksComplete =
-    !contest?.gameWinner.enabled || contest.games.every((game) => Boolean(picks[game.id]));
+  // A game with no posted line cannot be picked, so it cannot hold up a lineup.
+  const pickableGames = useMemo(
+    () => (contest?.gameWinner.enabled ? contest.games.filter(hasSpread) : []),
+    [contest],
+  );
+  const openPicks = pickableGames.filter((game) => !picks[game.id]).length;
+  const picksComplete = !contest?.gameWinner.enabled || openPicks === 0;
   // With the roster done but picks outstanding, the button moves the user on to
   // the picks rather than sitting disabled.
   const showNext = rosterComplete && !picksComplete && Boolean(validation?.filledSlots);
@@ -289,8 +311,6 @@ export function ContestPage() {
 
   const untilLock = Date.parse(contest.lockTime) - Date.now();
   const myRow = leaderboard.find((row) => row.isSelf);
-  // Editing, scoring and deleting belong to whoever started the contest.
-  const isOwner = Boolean(contest.ownerId) && contest.ownerId === uid;
 
   return (
     <main className="page page--wide">
@@ -313,8 +333,6 @@ export function ContestPage() {
             <span className="pill">{formatMoney(cap)} cap</span>
             <span className="pill">{standings.length} entries</span>
           </div>
-          <JoinCode contest={contest} />
-          {isOwner ? <OwnerBar contest={contest} /> : null}
           <div className="tiny faint" style={{ marginTop: 6 }}>
             {status === 'open'
               ? `Everything locks when the first game starts — ${formatDateTime(contest.lockTime)} (${formatCountdown(untilLock)})`
@@ -339,6 +357,7 @@ export function ContestPage() {
               className={`tab${tab === key ? ' tab--active' : ''}`}
               onClick={() => setTab(key)}
             >
+              {key === 'lineup' && !locked && openPicks > 0 ? <span className="tab__dot" /> : null}
               {key === 'lineup'
                 ? locked
                   ? 'My lineup'
@@ -353,6 +372,31 @@ export function ContestPage() {
         </div>
 
         {message ? <Banner tone={message.tone === 'ok' ? 'ok' : 'bad'}>{message.text}</Banner> : null}
+
+        {!locked && openPicks > 0 && Boolean(myEntry) ? (
+          <div className="banner banner--warn row row--between" style={{ gap: 10 }}>
+            <span style={{ minWidth: 0 }}>
+              <strong>
+                {openPicks} spread {openPicks === 1 ? 'pick is' : 'picks are'} waiting.
+              </strong>{' '}
+              The line has posted since you submitted. Make the pick and update to claim the bonus.
+            </span>
+            <button
+              type="button"
+              className="btn btn--sm btn--primary"
+              onClick={() => {
+                setTab('lineup');
+                // Let the tab render before scrolling to the picks.
+                window.setTimeout(
+                  () => picksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                  50,
+                );
+              }}
+            >
+              Go to picks
+            </button>
+          </div>
+        ) : null}
 
         {tab === 'lineup' ? (
           locked ? (
@@ -481,7 +525,7 @@ export function ContestPage() {
                     <div className="section-title">
                       <h2 style={{ fontSize: 15 }}>Spread picks</h2>
                       <span className="tiny faint">
-                        {Object.keys(picks).length}/{contest.games.length}
+                        {pickableGames.filter((game) => Boolean(picks[game.id])).length}/{pickableGames.length}
                       </span>
                     </div>
                     <GamePicks
@@ -807,7 +851,9 @@ function HowItWorks({
           <li>
             Pick your captain on the roster itself: every spot you have filled has a{' '}
             <strong>make captain</strong> button. Your <strong>captain scores {multiplier}× points</strong>{' '}
-            and costs <strong>{multiplier}× salary</strong> — one per roster, shown at the top of your lineup.
+            and costs <strong>{multiplier}× salary</strong>. The captain is{' '}
+            <strong>one of your {contest.rosterSlots.length} spots</strong>, not an extra one — they just move
+            to the top of the list.
           </li>
         ) : null}
         <li>
@@ -833,60 +879,6 @@ function HowItWorks({
           Everything locks when the first game starts. Until then, nobody can see your roster.
         </li>
       </ul>
-    </div>
-  );
-}
-
-/** Contest controls, shown only to the person who started it. */
-function OwnerBar({ contest }: { contest: Contest }) {
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const status = deriveStatus(contest);
-
-  async function remove() {
-    if (!window.confirm(`Delete "${contest.name}" and every entry in it? This cannot be undone.`)) return;
-    setBusy(true);
-    try {
-      await deleteContest(contest.id);
-      navigate('/');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
-      setBusy(false);
-    }
-  }
-
-  async function finalize() {
-    setBusy(true);
-    setError(null);
-    try {
-      await patchContest(contest.id, { status: 'complete', finalizedAt: new Date().toISOString() });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not finalize');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-      <div className="row row--wrap" style={{ gap: 8 }}>
-        <Link to={`/contest/${contest.id}/edit`} className="btn btn--sm">
-          Edit
-        </Link>
-        <Link to={`/contest/${contest.id}/live`} className="btn btn--sm">
-          Live scoring
-        </Link>
-        {status !== 'complete' ? (
-          <button type="button" className="btn btn--sm btn--ghost" disabled={busy} onClick={() => void finalize()}>
-            Mark final
-          </button>
-        ) : null}
-        <button type="button" className="btn btn--sm btn--danger" disabled={busy} onClick={() => void remove()}>
-          Delete
-        </button>
-      </div>
-      {error ? <Banner tone="bad">{error}</Banner> : null}
     </div>
   );
 }

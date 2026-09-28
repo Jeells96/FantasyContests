@@ -1,0 +1,20 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, ignoreHTTPSErrors: true });
+const p = await ctx.newPage();
+p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' });
+await p.evaluate(() => {
+  localStorage.setItem('fantasycontests.device.v1', '8feaff05f25b4817ab306dd21d09765a');
+  localStorage.setItem('fantasycontests.identity.v1', JSON.stringify({ firstName: 'Jaren', lastName: 'Eells', displayName: 'Jaren Eells', savedAt: new Date().toISOString() }));
+});
+await p.reload({ waitUntil: 'domcontentloaded' });
+await p.waitForSelector('.grid--contests .card', { timeout: 60000 });
+await p.waitForTimeout(2000);
+console.log('card:', (await p.textContent('.grid--contests .card')).replace(/\s+/g, ' ').slice(0, 220));
+await p.click('.ownerctl button');
+await p.waitForTimeout(500);
+console.log('menu:', await p.evaluate(() => [...document.querySelectorAll('.ownerctl__menu a, .ownerctl__menu button, .ownerctl__menu span')].map((x) => x.textContent.trim())));
+console.log('overflow:', await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth));
+await p.screenshot({ path: 'card.png', fullPage: true });
+await b.close();

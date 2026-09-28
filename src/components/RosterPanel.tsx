@@ -67,7 +67,10 @@ export function RosterPanel({
               disabled={readOnly}
             >
               <span className="slot__tag">
-                {isCaptain ? <span className="cpt-badge">CPT</span> : slot.label}
+                {/* The captain keeps their spot number: they are one of the
+                    roster's spots, not an extra one on top. */}
+                {slot.label}
+                {isCaptain ? <span className="cpt-badge">CPT</span> : null}
                 {slot.sport ? <div className="tiny faint">{slot.sport.toUpperCase()}</div> : null}
               </span>
 

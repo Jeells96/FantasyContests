@@ -270,6 +270,8 @@ export interface Contest {
   finalizedAt?: string | null;
   /** When live scoring last ran, used to stop every open tab syncing at once. */
   lastSyncAt?: string | null;
+  /** When a tab last looked for lines that had not posted at creation. */
+  lastSpreadCheckAt?: string | null;
   /** Newest first, capped; the contest's scoring feed. */
   scoringLog?: ScoringLogEntry[];
   results?: ContestResultsEntry[];

@@ -68,7 +68,13 @@ export function GamePicks({
                 {favoriteText(game)}
                 {game.spread?.source ? <span className="faint"> · line at contest creation</span> : null}
               </div>
-            ) : null}
+            ) : (
+              <div className="banner banner--warn" style={{ marginBottom: 8 }}>
+                <strong>No line yet.</strong> This game has not been given a spread, so there is nothing to
+                pick against. Finish the rest of your lineup — the pick opens here the moment the line posts,
+                and your contest will tell you to come back.
+              </div>
+            )}
 
             <div className="pick-grid">
               {(['away', 'home'] as const).map((side) => {
@@ -83,7 +89,7 @@ export function GamePicks({
                     className={`pick${picked ? ' pick--picked' : ''}${
                       picked && final && result === 'covered' ? ' pick--won' : ''
                     }${picked && final && result === 'missed' ? ' pick--lost' : ''}`}
-                    disabled={readOnly || !onPick}
+                    disabled={readOnly || !onPick || !withLine}
                     onClick={() => onPick?.(game.id, team.id)}
                   >
                     <span className="pick__head">

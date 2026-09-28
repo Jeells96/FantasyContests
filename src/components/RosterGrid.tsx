@@ -1,5 +1,6 @@
 import type { Contest, LeaderboardRow } from '../types';
 import { PlayerName } from './PlayerName';
+import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
 
 /**
  * Every roster at once, as tiles.
@@ -82,6 +83,29 @@ export function RosterGrid({
           ) : (
             <div className="rg-hidden">Hidden until lock</div>
           )}
+
+          {contest.gameWinner.enabled && row.picks ? (
+            <div className="rg-picks">
+              {contest.games.map((game) => {
+                const pick = row.picks?.[game.id];
+                const team = [game.home, game.away].find((candidate) => candidate.id === pick);
+                const result = gradePick(game, pick);
+                const final = game.state === 'post';
+                const side = team && team.id === game.home.id ? 'home' : 'away';
+                return (
+                  <span
+                    key={game.id}
+                    className={`rg-pick${final && result === 'covered' ? ' rg-pick--won' : ''}${
+                      final && result === 'missed' ? ' rg-pick--lost' : ''
+                    }${final && result === 'push' ? ' rg-pick--push' : ''}`}
+                  >
+                    {team?.abbreviation ?? '—'}
+                    {team && hasSpread(game) ? <span className="rg-pick__line">{formatLine(spreadFor(game, side))}</span> : null}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>

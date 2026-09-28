@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { ContestCard } from '../components/ContestCard';
 import { Banner, Empty, Spinner } from '../components/ui';
-import { countEntrants, findContestByJoinCode, joinContest, listenMyContests } from '../lib/db';
+import { countEntrants, findContestByJoinCode, getMyEntry, joinContest, listenMyContests } from '../lib/db';
+import { hasSpread } from '../lib/engine/spread';
 import { deriveStatus } from '../lib/engine/contestState';
 import { enteredContests } from '../lib/identity';
 import { useSession } from '../state/SessionContext';
@@ -21,6 +22,7 @@ export function HomePage() {
   const [contests, setContests] = useState<Contest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [openPicks, setOpenPicks] = useState<Record<string, number>>({});
   const [, setTick] = useState(0);
   const entered = useMemo(() => enteredContests(), []);
 
@@ -56,6 +58,28 @@ export function HomePage() {
       cancelled = true;
     };
   }, [contests]);
+
+  // A line that posted after someone entered is worth telling them about.
+  useEffect(() => {
+    const waiting = (contests ?? []).filter(
+      (contest) => contest.gameWinner.enabled && deriveStatus(contest) === 'open' && contest.games.some(hasSpread),
+    );
+    if (waiting.length === 0) return;
+    let cancelled = false;
+    void Promise.all(
+      waiting.map(async (contest) => {
+        const entry = await getMyEntry(contest.id, uid).catch(() => null);
+        if (!entry) return [contest.id, 0] as const;
+        const missing = contest.games.filter((game) => hasSpread(game) && !entry.picks?.[game.id]).length;
+        return [contest.id, missing] as const;
+      }),
+    ).then((pairs) => {
+      if (!cancelled) setOpenPicks(Object.fromEntries(pairs));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contests, uid]);
 
   const grouped = useMemo(() => {
     const map = new Map<ContestStatus, Contest[]>();
@@ -121,6 +145,7 @@ export function HomePage() {
                     contest={{ ...contest, entrantCount: counts[contest.id] ?? contest.entrantCount }}
                     entered={entered.has(contest.id)}
                     isOwner={contest.ownerId === uid}
+                    openPicks={openPicks[contest.id] ?? 0}
                   />
                 ))}
               </div>

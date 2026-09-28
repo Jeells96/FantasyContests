@@ -2057,3 +2057,106 @@ h4 {
   text-transform: uppercase;
   vertical-align: 1px;
 }
+
+/* Something on this tab needs attention. */
+.tab__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: 1px;
+}
+
+.pill--alert {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--warn);
+  font-weight: 900;
+}
+
+/* Spread picks on a roster tile, small enough not to crowd the lineup. */
+.rg-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.rg-pick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 1px 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--bg-elev);
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.rg-pick__line {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.rg-pick--won {
+  border-color: rgba(74, 222, 128, 0.5);
+  color: var(--accent);
+}
+
+.rg-pick--lost {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: var(--bad);
+}
+
+.rg-pick--push {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: var(--warn);
+}
+
+.roster-grid--dense .rg-pick {
+  font-size: 8px;
+  padding: 0 3px;
+}
+
+.card__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.card__footer .joincode {
+  flex: 1 1 200px;
+  margin-top: 0;
+}
+
+.ownerctl {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Opening the menu gives it the whole footer row rather than overflowing. */
+.ownerctl--open {
+  flex: 1 1 100%;
+}
+
+.ownerctl__menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 100%;
+  min-width: 0;
+}

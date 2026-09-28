@@ -531,6 +531,7 @@ export function ContestPage() {
                     <GamePicks
                       games={contest.games}
                       picks={picks}
+                      contestId={contest.id}
                       bonusPoints={contest.gameWinner.bonusPoints}
                       onPick={(gameId, teamId) => setPicks((current) => ({ ...current, [gameId]: teamId }))}
                     />

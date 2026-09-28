@@ -11,6 +11,35 @@ const TICK_MS = 120_000;
 const FRESH_MS = 150_000;
 
 /**
+ * Fetch any lines that have not posted yet and store them.
+ *
+ * Returns how many games got a line. Games that already carry one are never
+ * touched, so a line stays frozen at whatever it was when first captured.
+ */
+export async function pullMissingSpreads(contestId: string): Promise<number> {
+  const fresh = await getContest(contestId);
+  if (!fresh) throw new Error('That contest no longer exists.');
+  if (deriveStatus(fresh) !== 'open') throw new Error('This contest has already started.');
+
+  const pending = fresh.games.filter((game) => !hasSpread(game));
+  if (pending.length === 0) return 0;
+
+  const filled = await withSpreads(pending);
+  const found = new Map(filled.filter((game) => hasSpread(game)).map((game) => [game.id, game.spread]));
+  await patchContest(contestId, {
+    ...(found.size > 0
+      ? {
+          games: fresh.games.map((game) =>
+            found.has(game.id) ? { ...game, spread: found.get(game.id) ?? null } : game,
+          ),
+        }
+      : {}),
+    lastSpreadCheckAt: new Date().toISOString(),
+  });
+  return found.size;
+}
+
+/**
  * Picks up spreads that post after a contest is created.
  *
  * A line is frozen the moment it is captured, exactly as before — this only
@@ -38,18 +67,8 @@ export function usePendingSpreads(contest: Contest | null, enabled: boolean): vo
 
         const last = Date.parse(fresh.lastSpreadCheckAt ?? '');
         if (Number.isFinite(last) && Date.now() - last < FRESH_MS) return;
-        await patchContest(contestId!, { lastSpreadCheckAt: new Date().toISOString() });
 
-        const filled = await withSpreads(pending);
-        const found = new Map(filled.filter((game) => hasSpread(game)).map((game) => [game.id, game.spread]));
-        if (found.size === 0) return;
-
-        await patchContest(contestId!, {
-          games: fresh.games.map((game) =>
-            found.has(game.id) ? { ...game, spread: found.get(game.id) ?? null } : game,
-          ),
-          lastSpreadCheckAt: new Date().toISOString(),
-        });
+        await pullMissingSpreads(contestId!);
       } catch {
         // The line simply is not out yet; the next check tries again.
       } finally {

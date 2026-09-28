@@ -1,5 +1,6 @@
 import type { ContestGame } from '../types';
 import { formatGameTime } from '../lib/engine/contestState';
+import { PullLineButton } from './PullLineButton';
 import {
   favoriteText,
   formatLine,
@@ -22,12 +23,15 @@ export function GamePicks({
   onPick,
   readOnly,
   bonusPoints,
+  contestId,
 }: {
   games: ContestGame[];
   picks: Record<string, string>;
   onPick?: (gameId: string, teamId: string) => void;
   readOnly?: boolean;
   bonusPoints: number;
+  /** Set while picks can still be made, which allows pulling a missing line. */
+  contestId?: string;
 }) {
   const anySpread = games.some(hasSpread);
 
@@ -73,6 +77,7 @@ export function GamePicks({
                 <strong>No line yet.</strong> This game has not been given a spread, so there is nothing to
                 pick against. Finish the rest of your lineup — the pick opens here the moment the line posts,
                 and your contest will tell you to come back.
+                {contestId ? <PullLineButton contestId={contestId} /> : null}
               </div>
             )}
 

@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { deleteContest, patchContest } from '../lib/db';
 import { deriveStatus } from '../lib/engine/contestState';
 import { Banner } from './ui';
+import { PullLineButton } from './PullLineButton';
+import { hasSpread } from '../lib/engine/spread';
 import type { Contest } from '../types';
 
 /**
@@ -74,6 +76,14 @@ export function OwnerControls({ contest }: { contest: Contest }) {
           <button type="button" className="btn btn--sm btn--danger" disabled={busy} onClick={() => void remove()}>
             Delete
           </button>
+          {status === 'open' && contest.gameWinner.enabled && contest.games.some((game) => !hasSpread(game)) ? (
+            <div style={{ flex: '1 1 100%' }}>
+              <div className="tiny faint">
+                {contest.games.filter((game) => !hasSpread(game)).length} game(s) still have no spread.
+              </div>
+              <PullLineButton contestId={contest.id} />
+            </div>
+          ) : null}
           {error ? <Banner tone="bad">{error}</Banner> : null}
         </div>
       ) : null}

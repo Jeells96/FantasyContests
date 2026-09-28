@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Contest, LeaderboardRow } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
+import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
 import { Empty } from './ui';
 
 /**
@@ -107,20 +108,24 @@ export function LeaderboardList({
                     {contest.gameWinner.enabled && row.picks ? (
                       <div style={{ marginTop: 10 }}>
                         <div className="eyebrow" style={{ marginBottom: 6 }}>
-                          Game winner picks
+                          Spread picks
                         </div>
                         <div className="row row--wrap" style={{ gap: 6 }}>
                           {contest.games.map((game) => {
                             const pick = row.picks?.[game.id];
                             const team = [game.home, game.away].find((t) => t.id === pick);
-                            const correct = game.winnerTeamId && pick === game.winnerTeamId;
-                            const wrong = game.winnerTeamId && pick !== game.winnerTeamId;
+                            const result = gradePick(game, pick);
+                            const final = game.state === 'post';
+                            const side = team && team.id === game.home.id ? 'home' : 'away';
                             return (
                               <span
                                 key={game.id}
-                                className={`pill${correct ? ' pill--open' : ''}${wrong ? ' pill--bad' : ''}`}
+                                className={`pill${final && result === 'covered' ? ' pill--open' : ''}${
+                                  final && result === 'missed' ? ' pill--bad' : ''
+                                }${final && result === 'push' ? ' pill--warn' : ''}`}
                               >
                                 {team?.abbreviation ?? '—'}
+                                {team && hasSpread(game) ? ` ${formatLine(spreadFor(game, side))}` : ''}
                               </span>
                             );
                           })}

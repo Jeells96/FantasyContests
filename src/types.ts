@@ -65,6 +65,22 @@ export interface ContestTeam {
   score?: number;
 }
 
+/**
+ * The betting line for a game, frozen when the contest is created so it cannot
+ * move underneath entrants.
+ */
+export interface GameSpread {
+  /** Points given to the home team, e.g. -3.5 when home is favored by 3.5. */
+  homeSpread: number;
+  /** Which side is giving points. */
+  favorite: 'home' | 'away' | 'even';
+  /** How many points the favorite is giving (0 for a pick'em). */
+  line: number;
+  /** Where the line came from, shown to entrants. */
+  source: string;
+  capturedAt: string;
+}
+
 export interface ContestGame {
   /** Provider game id, unique within its sport. */
   id: string;
@@ -78,6 +94,8 @@ export interface ContestGame {
   statusDetail?: string;
   /** Team id of the winner, set once the game is final. */
   winnerTeamId?: string | null;
+  /** Frozen at contest creation; absent means picks are straight up. */
+  spread?: GameSpread | null;
 }
 
 export interface PlayerProjection {

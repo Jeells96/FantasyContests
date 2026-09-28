@@ -9,6 +9,7 @@ import type {
 import { validateLineup } from './lineup';
 import { captainEnabled, captainFirst, captainMultiplier, effectivePoints, effectiveSalary } from './captain';
 import { round2 } from './projections';
+import { gradePick } from './spread';
 
 export interface LeaderboardInput {
   contest: Contest;
@@ -136,9 +137,12 @@ function scorePicks(contest: Contest, entry: Entry | undefined): { correct: numb
   let correct = 0;
   let decided = 0;
   for (const game of contest.games) {
-    if (!game.winnerTeamId) continue;
+    if (game.state !== 'post') continue;
+    const result = gradePick(game, entry.picks?.[game.id]);
+    if (result === 'pending') continue;
     decided += 1;
-    if (entry.picks?.[game.id] === game.winnerTeamId) correct += 1;
+    // A push pays nobody, so it counts as decided but not correct.
+    if (result === 'covered') correct += 1;
   }
   return { correct, decided, total };
 }

@@ -467,7 +467,7 @@ export class EspnProvider implements SportProvider {
         return;
       }
       // ESPN spreads are quoted from the home team's perspective (negative =
-      // home favoured), so the home implied total is half the total plus half
+      // home favored), so the home implied total is half the total plus half
       // the margin.
       const homeImplied = overUnder / 2 - spread / 2;
       const awayImplied = overUnder / 2 + spread / 2;

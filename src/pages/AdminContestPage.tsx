@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Banner, Empty, KeyValue, Sheet, Spinner, SportPill, Toggle } from '../components/ui';
 import { createContest, getContest, getPool, updateContest } from '../lib/db';
 import { buildPlayerPool, listGamesRange, type ProviderGame } from '../lib/providers';
+import { withSpreads } from '../lib/providers/odds';
 import { earliestStart, formatGameTime, latestStart } from '../lib/engine/contestState';
 import { formatMoney } from '../lib/engine/lineup';
 import { gameWinnerBonusPoints, priceContest, type PricingResult } from '../lib/engine/pricing';
@@ -196,7 +197,8 @@ export function AdminContestPage() {
     setSaving(true);
     setError(null);
     try {
-      const games = selectedGames;
+      // Freeze the betting line now; it is never read again.
+      const games = await withSpreads(selectedGames);
       const payload = {
         name: name.trim() || defaultContestName(games),
         sports: Array.from(new Set(games.map((game) => game.sport))),
@@ -498,13 +500,18 @@ export function AdminContestPage() {
 
             <div className="card">
               <div className="section-title">
-                <h2 style={{ fontSize: 15 }}>Game-winner picks</h2>
+                <h2 style={{ fontSize: 15 }}>Spread picks</h2>
               </div>
               <Toggle
                 checked={gameWinnerEnabled}
                 onChange={setGameWinnerEnabled}
-                label="Require a winner pick for every game"
+                label="Require a pick against the spread for every game"
               />
+              <p className="tiny faint" style={{ margin: '8px 0 0' }}>
+                The betting line is captured when you publish and frozen onto the contest, so later movement
+                cannot change what entrants picked against. A game with no line available falls back to a
+                straight winner pick.
+              </p>
               {gameWinnerEnabled ? (
                 <div className="field" style={{ marginTop: 12 }}>
                   <label htmlFor="bonus">Bonus per correct pick (% of contest baseline)</label>

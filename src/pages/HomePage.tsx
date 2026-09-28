@@ -19,6 +19,7 @@ export function HomePage() {
   const [contests, setContests] = useState<Contest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [, setTick] = useState(0);
   const entered = useMemo(() => enteredContests(), []);
 
   useEffect(
@@ -29,6 +30,13 @@ export function HomePage() {
       ),
     [],
   );
+
+  // Re-render every second so the countdown to lock runs here too, not only on
+  // the contest page.
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Entry counts come from an aggregation query rather than the contest
   // document, which only an admin may write, so the number is live for users.

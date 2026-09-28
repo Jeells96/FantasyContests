@@ -178,6 +178,7 @@ No API keys are required; both feeds are public and CORS-enabled, so the browser
 | --- | --- | --- |
 | NFL, NBA | ESPN (`site.api.espn.com`, `site.web.api.espn.com`) | schedule, rosters + headshots, season stats for every athlete, per-player game logs, live box scores, market odds |
 | MLB | MLB Stats API (`statsapi.mlb.com`) | schedule + probable pitchers, rosters with season and last-10 splits, live box scores |
+| Betting lines | SportsGameOdds (`api.sportsgameodds.com`) | the point spread for each game, read once when a contest is created |
 
 MLB uses its own feed because ESPN's baseball box score omits categories this app scores (doubles, triples,
 stolen bases). Each sport sits behind the `SportProvider` interface in `src/lib/providers/`, so adding a fourth
@@ -234,7 +235,17 @@ it: the cheapest measured lineup captains its cheapest player, every other measu
 expensive, and the baseline adds the bonus on its strongest projection. Contests created before captains
 existed have no `captain` field, which reads as disabled.
 
-### Game-winner bonus
+### Spread picks (`src/lib/engine/spread.ts`)
+Picks are made against the point spread. The line is read from SportsGameOdds when the contest is created and
+frozen onto the contest, so later movement cannot change what entrants were picking against; a game with no
+line available falls back to a straight winner pick.
+
+Because not everyone knows what a spread is, the number is never presented on its own. Each side shows its
+line *and* what it has to do — "Must win by 4+", "Can lose by up to 3, or win" — and whole-number lines say
+plainly that landing exactly on the number is a tie that pays nobody. Grading follows the same rule: a pick
+covers when its margin plus its line is above zero, a push earns no bonus and costs nothing.
+
+### Spread pick bonus
 The bonus is a percentage of a **contest scoring baseline** frozen when the contest is created: the expected
 normalized score of a solid, ordinary lineup from the pool. It is never a percentage of a user's own score,
 which would make scoring circular, and every entrant receives exactly the same points for a correct pick.

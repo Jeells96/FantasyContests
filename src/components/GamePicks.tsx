@@ -1,7 +1,21 @@
 import type { ContestGame } from '../types';
 import { formatGameTime } from '../lib/engine/contestState';
+import {
+  favoriteText,
+  formatLine,
+  gradePick,
+  hasSpread,
+  requirementText,
+  spreadFor,
+} from '../lib/engine/spread';
 
-/** Game-winner predictions. Locked at the same moment as the lineup. */
+/**
+ * Picks against the spread, written for people who have never bet on one.
+ *
+ * Each side shows its line and, underneath, exactly what that team has to do —
+ * "Must win by 4+" or "Can lose by up to 3, or win" — so the number never has
+ * to be interpreted.
+ */
 export function GamePicks({
   games,
   picks,
@@ -15,56 +29,96 @@ export function GamePicks({
   readOnly?: boolean;
   bonusPoints: number;
 }) {
+  const anySpread = games.some(hasSpread);
+
   return (
     <div className="stack">
       <div className="banner">
-        Pick a winner in every game. Each correct pick adds{' '}
-        <strong className="num">+{bonusPoints.toFixed(1)}</strong> contest points — the same bonus for
-        everyone in this contest.
+        {anySpread ? (
+          <>
+            <strong>Pick one team in every game.</strong> The favorite starts with points taken away and the
+            underdog starts with points added, which evens the teams out. Each button says exactly what your
+            team has to do — you do not need to work the number out.
+            <div style={{ marginTop: 6 }}>
+              Get it right and you add <strong className="num">+{bonusPoints.toFixed(1)}</strong> points — the
+              same bonus for everyone.
+            </div>
+          </>
+        ) : (
+          <>
+            Pick a winner in every game. Each correct pick adds{' '}
+            <strong className="num">+{bonusPoints.toFixed(1)}</strong> contest points — the same bonus for
+            everyone in this contest.
+          </>
+        )}
       </div>
 
       {games.map((game) => {
         const pick = picks[game.id];
-        const decided = Boolean(game.winnerTeamId);
+        const withLine = hasSpread(game);
         return (
           <div key={game.id} className="card card--tight">
-            <div className="row row--between tiny faint" style={{ marginBottom: 8 }}>
+            <div className="row row--between tiny faint" style={{ marginBottom: 6 }}>
               <span>{formatGameTime(game.startTime)}</span>
               <span>{game.state === 'pre' ? game.sport.toUpperCase() : game.statusDetail}</span>
             </div>
-            <div className="row" style={{ gap: 8 }}>
-              {[game.away, game.home].map((team) => {
+
+            {withLine ? (
+              <div className="tiny muted" style={{ marginBottom: 8 }}>
+                {favoriteText(game)}
+                {game.spread?.source ? <span className="faint"> · line at contest creation</span> : null}
+              </div>
+            ) : null}
+
+            <div className="pick-grid">
+              {(['away', 'home'] as const).map((side) => {
+                const team = side === 'home' ? game.home : game.away;
                 const picked = pick === team.id;
-                const won = decided && game.winnerTeamId === team.id;
-                const lost = decided && game.winnerTeamId !== team.id;
+                const result = picked ? gradePick(game, team.id) : 'pending';
+                const final = game.state === 'post';
                 return (
                   <button
                     key={team.id}
                     type="button"
-                    className="btn btn--sm"
-                    style={{
-                      flex: 1,
-                      justifyContent: 'space-between',
-                      borderColor: picked ? 'var(--brand)' : undefined,
-                      background: picked ? 'rgba(91,140,255,0.16)' : undefined,
-                      opacity: lost && picked ? 0.6 : 1,
-                    }}
+                    className={`pick${picked ? ' pick--picked' : ''}${
+                      picked && final && result === 'covered' ? ' pick--won' : ''
+                    }${picked && final && result === 'missed' ? ' pick--lost' : ''}`}
                     disabled={readOnly || !onPick}
                     onClick={() => onPick?.(game.id, team.id)}
                   >
-                    <span className="row" style={{ gap: 6 }}>
-                      {team.logo ? (
-                        <img src={team.logo} alt="" width={18} height={18} style={{ objectFit: 'contain' }} />
-                      ) : null}
-                      {team.abbreviation}
-                      {team.id === game.home.id ? <span className="tiny faint">home</span> : null}
+                    <span className="pick__head">
+                      <span className="row" style={{ gap: 6, minWidth: 0 }}>
+                        {team.logo ? (
+                          <img src={team.logo} alt="" width={18} height={18} style={{ objectFit: 'contain' }} />
+                        ) : null}
+                        <strong>{team.abbreviation}</strong>
+                        {side === 'home' ? <span className="tiny faint">home</span> : null}
+                      </span>
+                      <span className="row" style={{ gap: 6 }}>
+                        {game.state !== 'pre' ? <span className="num tiny">{team.score ?? 0}</span> : null}
+                        {withLine ? <span className="pick__line">{formatLine(spreadFor(game, side))}</span> : null}
+                      </span>
                     </span>
-                    <span className="row" style={{ gap: 5 }}>
-                      {game.state !== 'pre' ? <span className="num">{team.score ?? 0}</span> : null}
-                      {won ? <span className="pill pill--open">W</span> : null}
-                      {picked && !decided ? <span className="tiny">✓</span> : null}
-                      {picked && won ? <span className="pill pill--open">+</span> : null}
-                    </span>
+
+                    <span className="pick__need">{requirementText(game, side)}</span>
+
+                    {picked ? (
+                      <span className="pick__state">
+                        {final
+                          ? result === 'covered'
+                            ? '✓ Bonus earned'
+                            : result === 'push'
+                              ? 'Tie — no bonus'
+                              : 'No bonus'
+                          : game.state === 'in'
+                            ? result === 'covered'
+                              ? 'Currently ahead of the line'
+                              : result === 'push'
+                                ? 'Exactly on the line'
+                                : 'Currently behind the line'
+                            : 'Your pick'}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}

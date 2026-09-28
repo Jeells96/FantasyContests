@@ -451,7 +451,7 @@ export function ContestPage() {
                 {contest.gameWinner.enabled ? (
                   <div className="card" ref={picksRef}>
                     <div className="section-title">
-                      <h2 style={{ fontSize: 15 }}>Game winners</h2>
+                      <h2 style={{ fontSize: 15 }}>Spread picks</h2>
                       <span className="tiny faint">
                         {Object.keys(picks).length}/{contest.games.length}
                       </span>
@@ -602,7 +602,7 @@ function LockedLineup({
       {contest.gameWinner.enabled ? (
         <div className="card">
           <div className="section-title">
-            <h2 style={{ fontSize: 15 }}>Your picks</h2>
+            <h2 style={{ fontSize: 15 }}>Your spread picks</h2>
           </div>
           <GamePicks games={contest.games} picks={picks} bonusPoints={contest.gameWinner.bonusPoints} readOnly />
         </div>
@@ -683,7 +683,7 @@ function ContestInfo({ contest }: { contest: import('../types').Contest }) {
       {contest.gameWinner.enabled ? (
         <div className="card">
           <div className="section-title">
-            <h2 style={{ fontSize: 15 }}>Game-winner bonus</h2>
+            <h2 style={{ fontSize: 15 }}>Spread pick bonus</h2>
           </div>
           <KeyValue label="Bonus per correct pick" value={`${contest.gameWinner.bonusPercent}%`} />
           <KeyValue label="Contest scoring baseline" value={contest.scoringBaseline.toFixed(1)} />
@@ -773,10 +773,19 @@ function HowItWorks({
           <strong>{formatMoney(contest.salaryCapInfo.cap)}</strong> salary cap.
         </li>
         {contest.gameWinner.enabled ? (
-          <li>
-            Pick a winner in every game. Each correct pick adds{' '}
-            <strong>+{contest.gameWinner.bonusPoints.toFixed(1)}</strong> — the same for everyone.
-          </li>
+          contest.games.some((game) => Boolean(game.spread)) ? (
+            <li>
+              <strong>Pick one team in every game, against the spread.</strong> The favorite has points taken
+              away and the underdog gets points added, to even the teams out. Each button tells you exactly
+              what has to happen — "must win by 4+", "can lose by up to 3, or win". Getting it right adds{' '}
+              <strong>+{contest.gameWinner.bonusPoints.toFixed(1)}</strong>, the same for everyone.
+            </li>
+          ) : (
+            <li>
+              Pick a winner in every game. Each correct pick adds{' '}
+              <strong>+{contest.gameWinner.bonusPoints.toFixed(1)}</strong> — the same for everyone.
+            </li>
+          )
         ) : null}
         <li>
           Everything locks when the first game starts. Until then, nobody can see your roster.

@@ -156,9 +156,6 @@ const NBA_CONFIG: EspnSportConfig = {
 const CONFIGS: Partial<Record<Sport, EspnSportConfig>> = { nfl: NFL_CONFIG, nba: NBA_CONFIG };
 
 /** League-average NFL team defense production per game, used for D/ST baselines. */
-/** How many recent plays are carried for attributing score changes. */
-const PLAY_WINDOW = 60;
-
 /** ESPN pays a field goal by how far it was. */
 function fieldGoalBand(yards: number): string {
   if (yards >= 60) return 'fgMade60';
@@ -563,7 +560,7 @@ export class EspnProvider implements SportProvider {
       winnerTeamId,
       players,
       situation: this.readSituation(summary, status, { homeScore, awayScore }),
-      plays: allPlays.slice(-PLAY_WINDOW),
+      plays: allPlays,
     };
   }
 
@@ -673,6 +670,7 @@ export class EspnProvider implements SportProvider {
         offenseTeamId: offense === undefined || offense === null ? undefined : String(offense),
         scoring: play?.scoringPlay === true,
         turnover: play?.isTurnover === true,
+        wallclock: typeof play?.wallclock === 'string' ? play.wallclock : undefined,
       } satisfies GamePlay;
     });
   }

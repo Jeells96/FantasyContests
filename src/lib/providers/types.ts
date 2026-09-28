@@ -64,6 +64,8 @@ export interface GamePlay {
   offenseTeamId?: string;
   scoring: boolean;
   turnover: boolean;
+  /** When the play actually happened, when the feed says. */
+  wallclock?: string;
 }
 
 export interface LiveGameStats {

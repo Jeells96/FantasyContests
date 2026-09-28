@@ -86,7 +86,11 @@ export function applyLiveResults(
     const game = gamesById.get(player.gameId);
     // The play that moved this player, not wherever the game happens to be now:
     // one round of syncing usually spans several plays.
-    const play = findPlay(player, playsByGame.get(player.gameId) ?? [], game);
+    const plays = playsByGame.get(player.gameId) ?? [];
+    const play = findPlay(player, plays, game);
+    // A change nothing in the feed explains is still this game's news, so it is
+    // timed with the game rather than with the clock on the wall.
+    const happenedAt = play?.wallclock ?? plays[plays.length - 1]?.wallclock ?? at;
     const awayScore = play?.awayScore ?? situation?.awayScore ?? game?.away.score ?? 0;
     const homeScore = play?.homeScore ?? situation?.homeScore ?? game?.home.score ?? 0;
     events.push({
@@ -105,10 +109,12 @@ export function applyLiveResults(
       scoreLine: game
         ? `${game.away.abbreviation} ${awayScore} - ${homeScore} ${game.home.abbreviation}`
         : undefined,
-      at,
+      // Timed by the play, not by the round that noticed it, so the feed reads
+      // as the game's own timeline rather than as a sync history.
+      at: happenedAt,
     });
   }
-  events.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  events.sort(byNewestFirst);
 
   return {
     games,
@@ -192,7 +198,20 @@ export function mergeScoringLog(existing: ScoringLogEntry[] | undefined, events:
     const [older] = previous.splice(index, 1);
     merged.push({ ...event, delta: round2(older.delta + event.delta) });
   }
-  return [...merged.filter((event) => Math.abs(event.delta) >= MIN_DELTA), ...previous].slice(0, SCORING_LOG_LIMIT);
+  return [...merged.filter((event) => Math.abs(event.delta) >= MIN_DELTA), ...previous]
+    .sort(byNewestFirst)
+    .slice(0, SCORING_LOG_LIMIT);
+}
+
+/**
+ * Newest first by when the play happened. Entries recorded before plays were
+ * timed fall back to when they were noticed, and two changes on the same play
+ * are ordered by size so the headline of a play leads it.
+ */
+function byNewestFirst(a: ScoringLogEntry, b: ScoringLogEntry): number {
+  const at = Date.parse(b.at) - Date.parse(a.at);
+  if (at !== 0 && Number.isFinite(at)) return at;
+  return Math.abs(b.delta) - Math.abs(a.delta);
 }
 
 function round2(value: number): number {

@@ -23,8 +23,6 @@ import type {
 
 const API = 'https://statsapi.mlb.com/api/v1';
 
-/** How many recent plays are carried for attributing score changes. */
-const PLAY_WINDOW = 40;
 const LEAGUE_AVERAGE_ERA = 4.1;
 
 const HITTING_MAP: Record<string, string> = {
@@ -425,7 +423,7 @@ export class MlbProvider implements SportProvider {
 function readPlays(playByPlay: any, scores: { awayScore: number; homeScore: number }): GamePlay[] {
   const all: any[] = Array.isArray(playByPlay?.allPlays) ? playByPlay.allPlays : [];
   if (all.length === 0) return [];
-  return all.slice(-PLAY_WINDOW).map((play, index) => {
+  return all.map((play, index) => {
     const about = play?.about ?? {};
     const count = play?.count ?? {};
     const result = play?.result ?? {};
@@ -445,6 +443,7 @@ function readPlays(playByPlay: any, scores: { awayScore: number; homeScore: numb
       athleteIds: athleteIds.length > 0 ? athleteIds : undefined,
       scoring: toNumber(result.rbi) > 0,
       turnover: false,
+      wallclock: typeof play?.playEndTime === 'string' ? play.playEndTime : undefined,
     } satisfies GamePlay;
   });
 }

@@ -561,7 +561,20 @@ export class EspnProvider implements SportProvider {
       clock: period > 0 ? `${ordinalPeriod(this.sport, period)}${displayClock ? ` ${displayClock}` : ''}` : undefined,
     };
 
-    if (this.sport !== 'nfl') return situation;
+    // Basketball summaries carry no clock on the header, so the period and
+    // clock come from the last play instead.
+    if (this.sport !== 'nfl') {
+      const plays: any[] = Array.isArray(summary?.plays) ? summary.plays : [];
+      const last = plays[plays.length - 1];
+      const lastPeriod = Number(last?.period?.number ?? period);
+      const lastClock = String(last?.clock?.displayValue ?? displayClock).trim();
+      if (lastPeriod > 0) {
+        situation.clock = `${ordinalPeriod(this.sport, lastPeriod)}${lastClock ? ` ${lastClock}` : ''}`;
+      }
+      if (typeof last?.awayScore === 'number') situation.awayScore = last.awayScore;
+      if (typeof last?.homeScore === 'number') situation.homeScore = last.homeScore;
+      return situation;
+    }
 
     const drives = summary?.drives ?? {};
     const candidates: any[] = [

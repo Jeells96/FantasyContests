@@ -45,6 +45,9 @@ export function applyLiveResults(
       winnerTeamId: result.winnerTeamId,
       home: { ...game.home, score: result.homeScore },
       away: { ...game.away, score: result.awayScore },
+      situation: result.situation
+        ? { detail: result.situation.detail, clock: result.situation.clock }
+        : game.situation ?? null,
     };
   });
 

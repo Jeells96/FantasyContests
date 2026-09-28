@@ -11,6 +11,18 @@ export interface GetJsonOptions {
   retries?: number;
 }
 
+/**
+ * Some networks only let a recognized client through to the public feeds, so
+ * the CLI workers can be given a user agent with FEED_USER_AGENT. Browsers
+ * send their own and ignore this.
+ */
+const NODE_HEADERS: Record<string, string> = (() => {
+  if (typeof window !== 'undefined') return {};
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  const agent = env?.FEED_USER_AGENT;
+  return agent ? { 'user-agent': agent } : ({} as Record<string, string>);
+})();
+
 export async function getJson<T>(url: string, options: GetJsonOptions = {}): Promise<T> {
   const { cacheMs = 0, timeoutMs = 15000, retries = 2 } = options;
   if (cacheMs > 0) {
@@ -23,7 +35,7 @@ export async function getJson<T>(url: string, options: GetJsonOptions = {}): Pro
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
+      const response = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json', ...NODE_HEADERS } });
       if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
       const value = (await response.json()) as T;
       if (cacheMs > 0) cache.set(url, { at: Date.now(), value });

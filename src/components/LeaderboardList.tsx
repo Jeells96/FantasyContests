@@ -22,7 +22,8 @@ export function LeaderboardList({
   pointDeltas?: Map<string, number>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  // The whole field at a glance is the more useful default.
+  const [showAll, setShowAll] = useState(true);
 
   if (rows.length === 0) {
     return <Empty title="No entries yet" hint="Be the first to build a lineup." />;

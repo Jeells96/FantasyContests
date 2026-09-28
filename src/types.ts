@@ -96,6 +96,8 @@ export interface ContestGame {
   winnerTeamId?: string | null;
   /** Frozen at contest creation; absent means picks are straight up. */
   spread?: GameSpread | null;
+  /** Where the game stands right now, for the live scoreboard. */
+  situation?: { detail?: string; clock?: string } | null;
 }
 
 export interface PlayerProjection {

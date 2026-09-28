@@ -12,6 +12,7 @@ import { useContestData } from '../hooks/useContestData';
 import { useScoringEvents } from '../hooks/useScoringEvents';
 import { usePointDeltas } from '../hooks/usePointDeltas';
 import { ScoringTab } from '../components/ScoringTab';
+import { ScoreStrip } from '../components/ScoreStrip';
 import { useLiveSync } from '../hooks/useLiveSync';
 import { saveEntry } from '../lib/db';
 import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
@@ -315,6 +316,8 @@ export function ContestPage() {
                 : 'Contest complete.'}
           </div>
         </div>
+
+        <ScoreStrip games={contest.games} lastSyncAt={contest.lastSyncAt ?? undefined} />
 
         <div className="tabs">
           {(['lineup', 'board', 'scoring', 'info'] as Tab[]).map((key) => (

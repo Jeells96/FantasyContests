@@ -387,14 +387,19 @@ export class MlbProvider implements SportProvider {
       }
     }
 
+    // "Top 5th" with the count and outs beneath it, the way a ballpark board
+    // reads: balls-strikes, then outs.
     const outs = toNumber(linescore?.outs);
-    const inning = toNumber(linescore?.currentInning);
+    const balls = toNumber(linescore?.balls);
+    const strikes = toNumber(linescore?.strikes);
+    const inningOrdinal = String(linescore?.currentInningOrdinal ?? '').trim();
     const half = String(linescore?.inningState ?? '').trim();
+    const live = state === 'in' && inningOrdinal !== '';
     const situation: GameSituation = {
       awayScore,
       homeScore,
-      clock: inning > 0 ? `${half || 'Inning'} ${inning}` : undefined,
-      detail: inning > 0 ? `${outs} out${outs === 1 ? '' : 's'}` : undefined,
+      clock: inningOrdinal ? `${half || ''} ${inningOrdinal}`.trim() : undefined,
+      detail: live ? `${balls}-${strikes}, ${outs} out${outs === 1 ? '' : 's'}` : undefined,
     };
 
     return { gameId: game.id, state, statusDetail, homeScore, awayScore, winnerTeamId, players, situation };

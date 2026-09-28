@@ -71,7 +71,18 @@ function ScoreCard({ game }: { game: ContestGame }) {
   );
 }
 
-export function ScoreStrip({ games, lastSyncAt }: { games: ContestGame[]; lastSyncAt?: string }) {
+export function ScoreStrip({
+  games,
+  lastSyncAt,
+  onRefresh,
+  refreshing = false,
+}: {
+  games: ContestGame[];
+  lastSyncAt?: string;
+  /** Runs a scoring round now. What it writes is what everyone else sees. */
+  onRefresh?: () => void;
+  refreshing?: boolean;
+}) {
   const track = useRef<HTMLDivElement | null>(null);
   const [tick, setTick] = useState(() => Date.now());
   const pausedUntil = useRef(0);
@@ -154,7 +165,20 @@ export function ScoreStrip({ games, lastSyncAt }: { games: ContestGame[]; lastSy
           {anyLive ? <span className="ss-dot" aria-hidden="true" /> : null}
           {anyLive ? `Live · ${liveCount} game${liveCount === 1 ? '' : 's'}` : 'Scoreboard'}
         </span>
-        {since ? <span className="ss-since">updated {since}</span> : null}
+        {onRefresh ? (
+          <button
+            type="button"
+            className="ss-since ss-since--button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            title="Refresh scoring for everyone"
+          >
+            {refreshing ? <span className="spinner spinner--xs" /> : <RefreshIcon />}
+            {refreshing ? 'refreshing…' : since ? `updated ${since}` : 'refresh'}
+          </button>
+        ) : since ? (
+          <span className="ss-since">updated {since}</span>
+        ) : null}
       </div>
       <div className="ss-track" ref={track}>
         {games.map((game) => (
@@ -162,5 +186,20 @@ export function ScoreStrip({ games, lastSyncAt }: { games: ContestGame[]; lastSy
         ))}
       </div>
     </section>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">
+      <path
+        d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

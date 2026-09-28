@@ -4,6 +4,7 @@ import { captainEnabled, captainMultiplier } from '../lib/engine/captain';
 import { bestPossibleLineup } from '../lib/engine/optimal';
 import { formatMoney } from '../lib/engine/lineup';
 import { DeltaBadge, Empty, Initials, shortPersonName } from './ui';
+import { PlayerName } from './PlayerName';
 
 /**
  * The scoring tab: who is putting up points, who has them, and the best score
@@ -16,6 +17,7 @@ export function ScoringTab({
   pointDeltas,
   locked,
   selfUid,
+  onOpenPlayer,
 }: {
   contest: Contest;
   players: ContestPlayer[];
@@ -23,6 +25,7 @@ export function ScoringTab({
   pointDeltas: Map<string, number>;
   locked: boolean;
   selfUid: string | null;
+  onOpenPlayer?: (playerId: string) => void;
 }) {
   const [showBest, setShowBest] = useState(false);
   const [showAllFeed, setShowAllFeed] = useState(false);
@@ -148,7 +151,11 @@ export function ScoringTab({
                   </span>
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span className="feed__name">
-                      {event.playerName}
+                      <PlayerName
+                        name={event.playerName}
+                        playerId={event.playerId}
+                        onOpenPlayer={onOpenPlayer}
+                      />
                       <span className="faint"> · {event.teamAbbr}</span>
                     </span>
                     {event.situation || event.clock || event.scoreLine ? (
@@ -208,7 +215,7 @@ export function ScoringTab({
                   </span>
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span className="feed__name">
-                      {player.name}
+                      <PlayerName name={player.name} playerId={player.id} onOpenPlayer={onOpenPlayer} />
                       <span className="faint">
                         {' '}
                         · {player.position} · {player.teamAbbr}

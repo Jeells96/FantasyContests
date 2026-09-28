@@ -2,6 +2,7 @@ import type { GameState, Sport, StatMap } from '../../types';
 import { applyDerivedStats } from '../stats';
 import { getJson, mapLimit, mapLimitSettled, splitComposite, toNumber } from './http';
 import type {
+  GamePlay,
   BuildPoolOptions,
   GameSituation,
   LiveGameStats,
@@ -155,6 +156,9 @@ const NBA_CONFIG: EspnSportConfig = {
 const CONFIGS: Partial<Record<Sport, EspnSportConfig>> = { nfl: NFL_CONFIG, nba: NBA_CONFIG };
 
 /** League-average NFL team defense production per game, used for D/ST baselines. */
+/** How many recent plays are carried for attributing score changes. */
+const PLAY_WINDOW = 60;
+
 const DST_BASELINE: StatMap = { dstSack: 2.4, dstInt: 0.75, dstFumRec: 0.55, dstTD: 0.15 };
 
 interface EspnCategory {
@@ -544,6 +548,7 @@ export class EspnProvider implements SportProvider {
       winnerTeamId,
       players,
       situation: this.readSituation(summary, status, { homeScore, awayScore }),
+      plays: this.readPlays(summary, { homeScore, awayScore }),
     };
   }
 
@@ -599,6 +604,62 @@ export class EspnProvider implements SportProvider {
     if (typeof play?.awayScore === 'number') situation.awayScore = play.awayScore;
     if (typeof play?.homeScore === 'number') situation.homeScore = play.homeScore;
     return situation;
+  }
+
+  /**
+   * The tail of the game's play feed, oldest first.
+   *
+   * Football gives no athlete ids on a play, so the text is what a player is
+   * matched against; basketball names the athletes outright.
+   */
+  private readPlays(summary: any, scores: { homeScore: number; awayScore: number }): GamePlay[] {
+    const raw: any[] =
+      this.sport === 'nfl'
+        ? [
+            ...((summary?.drives?.previous ?? []).flatMap((drive: any) => drive?.plays ?? []) as any[]),
+            ...(summary?.drives?.current?.plays ?? []),
+          ]
+        : Array.isArray(summary?.plays)
+          ? summary.plays
+          : [];
+    if (raw.length === 0) return [];
+
+    // The current drive is also the last of the previous ones, so the same
+    // plays arrive twice; the first occurrence keeps the order right.
+    const seen = new Set<string>();
+    const unique = raw.filter((play) => {
+      const id = String(play?.id ?? '');
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    return unique.slice(-PLAY_WINDOW).map((play, index) => {
+      const period = Number(play?.period?.number ?? 0);
+      const clock = String(play?.clock?.displayValue ?? '').trim();
+      const down = Number(play?.start?.down ?? 0);
+      const distance = Number(play?.start?.distance ?? 0);
+      const athleteIds = (play?.participants ?? [])
+        .map((participant: any) => String(participant?.athlete?.id ?? ''))
+        .filter((id: string) => id !== '');
+      const offense =
+        (play?.teamParticipants ?? []).find((side: any) => side?.type === 'offense')?.id ??
+        play?.start?.team?.id ??
+        play?.team?.id;
+      return {
+        id: String(play?.id ?? `${index}`),
+        detail: this.sport === 'nfl' && down > 0 ? `${ordinal(down)} & ${distance}` : undefined,
+        clock: period > 0 ? `${ordinalPeriod(this.sport, period)}${clock ? ` ${clock}` : ''}` : undefined,
+        awayScore: typeof play?.awayScore === 'number' ? play.awayScore : scores.awayScore,
+        homeScore: typeof play?.homeScore === 'number' ? play.homeScore : scores.homeScore,
+        text: typeof play?.text === 'string' ? play.text : undefined,
+        athleteIds: athleteIds.length > 0 ? athleteIds : undefined,
+        offenseTeamId: offense === undefined || offense === null ? undefined : String(offense),
+        scoring: play?.scoringPlay === true,
+        turnover: play?.isTurnover === true,
+      } satisfies GamePlay;
+    });
   }
 
   /**

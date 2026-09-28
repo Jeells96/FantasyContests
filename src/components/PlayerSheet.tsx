@@ -19,6 +19,8 @@ export function PlayerSheet({
   const factor = normalizationFactor(contest.normalization, player.sport);
   const liveRows = scoringBreakdown(player.liveStats, table);
   const seasonRows = scoringBreakdown(player.seasonStats, table).slice(0, 8);
+  const liveRaw = liveRows.reduce((sum, row) => sum + row.points, 0);
+  const started = player.started === true;
 
   return (
     <Sheet
@@ -39,27 +41,16 @@ export function PlayerSheet({
         {player.injuryStatus ? <span className="pill pill--warn">{player.injuryStatus}</span> : null}
       </div>
 
+      {/* How the points on the leaderboard were actually earned. */}
       <div className="card card--tight">
-        <KeyValue label="Salary" value={formatMoney(player.salary)} />
-        <KeyValue label="Projected (contest points)" value={player.projection.normalized.toFixed(1)} />
-        {player.sport !== 'nfl' ? (
-          <KeyValue label="Projected (raw sport points)" value={player.projection.raw.toFixed(1)} />
-        ) : null}
-        <KeyValue label="Live raw points" value={(player.rawPoints ?? 0).toFixed(2)} />
-        <KeyValue label="Live contest points" value={(player.normalizedPoints ?? 0).toFixed(2)} />
-        {player.sport !== 'nfl' ? (
-          <KeyValue label="Normalization factor" value={`×${factor.toFixed(3)}`} />
-        ) : null}
-        <KeyValue label="Games played (season)" value={player.gamesPlayed ?? 0} />
-      </div>
-
-      {liveRows.length > 0 ? (
-        <>
-          <div className="section-title" style={{ marginTop: 16 }}>
-            <h2 style={{ fontSize: 14 }}>Live scoring</h2>
-            <span className="tiny faint">raw points</span>
-          </div>
-          <table className="table-mini">
+        <div className="row row--between" style={{ alignItems: 'baseline' }}>
+          <span className="eyebrow">Points so far</span>
+          <span className="num" style={{ fontSize: 26, fontWeight: 900 }}>
+            {(player.normalizedPoints ?? 0).toFixed(1)}
+          </span>
+        </div>
+        {liveRows.length > 0 ? (
+          <table className="table-mini" style={{ marginTop: 8 }}>
             <tbody>
               {liveRows.map((row) => (
                 <tr key={row.key}>
@@ -71,10 +62,35 @@ export function PlayerSheet({
                   </td>
                 </tr>
               ))}
+              <tr className="table-mini__total">
+                <td>{player.sport === 'nfl' ? 'Total' : 'Raw total'}</td>
+                <td />
+                <td className="num">{round1(liveRaw)}</td>
+              </tr>
+              {player.sport !== 'nfl' ? (
+                <tr className="table-mini__total">
+                  <td>Contest points (×{factor.toFixed(3)})</td>
+                  <td />
+                  <td className="num">{(player.normalizedPoints ?? 0).toFixed(1)}</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
-        </>
-      ) : null}
+        ) : (
+          <p className="tiny faint" style={{ margin: '8px 0 0' }}>
+            {started ? 'Nothing on the stat sheet yet.' : 'This game has not started.'}
+          </p>
+        )}
+      </div>
+
+      <div className="card card--tight">
+        <KeyValue label="Salary" value={formatMoney(player.salary)} />
+        <KeyValue label="Projected (contest points)" value={player.projection.normalized.toFixed(1)} />
+        {player.sport !== 'nfl' ? (
+          <KeyValue label="Projected (raw sport points)" value={player.projection.raw.toFixed(1)} />
+        ) : null}
+        <KeyValue label="Games played (season)" value={player.gamesPlayed ?? 0} />
+      </div>
 
       {seasonRows.length > 0 ? (
         <>
@@ -102,4 +118,8 @@ export function PlayerSheet({
       ) : null}
     </Sheet>
   );
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
 }

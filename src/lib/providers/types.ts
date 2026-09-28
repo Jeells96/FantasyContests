@@ -44,6 +44,28 @@ export interface GameSituation {
   homeScore: number;
 }
 
+/**
+ * One play from the game's own feed, used to say which play moved a player's
+ * score rather than stamping everything with wherever the game happens to be.
+ */
+export interface GamePlay {
+  id: string;
+  /** Down and distance, or the count and outs: the same phrasing as a situation. */
+  detail?: string;
+  /** "3rd 10:15", "Q3 5:22", "Top 9th". */
+  clock?: string;
+  awayScore: number;
+  homeScore: number;
+  /** The feed's own description, matched against a player's name where no ids exist. */
+  text?: string;
+  /** Athlete ids the feed credits on this play, when it gives any. */
+  athleteIds?: string[];
+  /** Team with the ball, so a defense can be matched to its opponent's plays. */
+  offenseTeamId?: string;
+  scoring: boolean;
+  turnover: boolean;
+}
+
 export interface LiveGameStats {
   gameId: string;
   state: GameState;
@@ -54,6 +76,8 @@ export interface LiveGameStats {
   /** playerId -> canonical live stats. Includes synthetic team units. */
   players: Record<string, StatMap>;
   situation?: GameSituation;
+  /** Recent plays, oldest first. */
+  plays?: GamePlay[];
 }
 
 export interface BuildPoolOptions {

@@ -221,6 +221,8 @@ export interface ScoringLogEntry {
   teamAbbr: string;
   sport: Sport;
   headshot?: string;
+  /** The play this change is credited to, so later corrections fold into it. */
+  playId?: string;
   /** Contest points added by this update; negative when a player lost points. */
   delta: number;
   /** The player's contest points after it. */

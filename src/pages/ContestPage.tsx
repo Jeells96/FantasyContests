@@ -73,7 +73,7 @@ export function ContestPage() {
   );
   const { events } = useScoringEvents(contest, players, myPlayerIds, locked && status !== 'complete');
   // Anyone watching a live contest keeps its scores moving.
-  useLiveSync(contest, status === 'live');
+  const liveSync = useLiveSync(contest, status === 'live');
   // Who just scored, shown everywhere a player appears.
   const pointDeltas = usePointDeltas(players, locked);
 
@@ -285,6 +285,12 @@ export function ContestPage() {
     }
   }
 
+  // One place to open a player's scoring breakdown, from any list that names them.
+  const openPlayer = (playerId: string) => {
+    const player = players.find((candidate) => candidate.id === playerId);
+    if (player) setDetail(player);
+  };
+
   const untilLock = Date.parse(contest.lockTime) - Date.now();
   const myRow = leaderboard.find((row) => row.isSelf);
   // Editing, scoring and deleting belong to whoever started the contest.
@@ -322,7 +328,12 @@ export function ContestPage() {
           </div>
         </div>
 
-        <ScoreStrip games={contest.games} lastSyncAt={contest.lastSyncAt ?? undefined} />
+        <ScoreStrip
+          games={contest.games}
+          lastSyncAt={contest.lastSyncAt ?? undefined}
+          onRefresh={status === 'live' ? liveSync.syncNow : undefined}
+          refreshing={liveSync.syncing}
+        />
 
         <div className="tabs">
           {(['lineup', 'board', 'scoring', 'info'] as Tab[]).map((key) => (
@@ -504,7 +515,13 @@ export function ContestPage() {
         ) : null}
 
         {tab === 'board' ? (
-          <LeaderboardList rows={leaderboard} contest={contest} locked={locked} pointDeltas={pointDeltas} />
+          <LeaderboardList
+            rows={leaderboard}
+            contest={contest}
+            locked={locked}
+            pointDeltas={pointDeltas}
+            onOpenPlayer={openPlayer}
+          />
         ) : null}
 
         {tab === 'scoring' ? (
@@ -515,6 +532,7 @@ export function ContestPage() {
             pointDeltas={pointDeltas}
             locked={locked}
             selfUid={uid}
+            onOpenPlayer={openPlayer}
           />
         ) : null}
 

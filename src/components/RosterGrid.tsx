@@ -1,4 +1,5 @@
 import type { Contest, LeaderboardRow } from '../types';
+import { PlayerName } from './PlayerName';
 
 /**
  * Every roster at once, as tiles.
@@ -11,10 +12,12 @@ export function RosterGrid({
   rows,
   contest,
   pointDeltas,
+  onOpenPlayer,
 }: {
   rows: LeaderboardRow[];
   contest: Contest;
   pointDeltas?: Map<string, number>;
+  onOpenPlayer?: (playerId: string) => void;
 }) {
   const columns = rows.length <= 2 ? 1 : rows.length <= 4 ? 2 : rows.length <= 9 ? 3 : 4;
   const captainMultiplier = contest.captain?.multiplier ?? 1.5;
@@ -53,7 +56,15 @@ export function RosterGrid({
                   >
                     <span className="rg-player">
                       {line.isCaptain ? <span className="rg-cpt">C</span> : null}
-                      {line.player ? shortName(line.player.name, line.player.teamAbbr) : '—'}
+                      {line.player ? (
+                        <PlayerName
+                          name={shortName(line.player.name, line.player.teamAbbr)}
+                          playerId={line.player.id}
+                          onOpenPlayer={onOpenPlayer}
+                        />
+                      ) : (
+                        '—'
+                      )}
                     </span>
                     <span className="rg-pts">
                       {line.normalizedPoints.toFixed(1)}

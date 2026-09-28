@@ -4,6 +4,7 @@ import { formatMoney } from '../lib/engine/lineup';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
 import { DeltaBadge, Empty } from './ui';
 import { RosterGrid } from './RosterGrid';
+import { PlayerName } from './PlayerName';
 
 /**
  * Live leaderboard. Rosters are only ever present in a row once the contest has
@@ -15,11 +16,13 @@ export function LeaderboardList({
   contest,
   locked,
   pointDeltas,
+  onOpenPlayer,
 }: {
   rows: LeaderboardRow[];
   contest: Contest;
   locked: boolean;
   pointDeltas?: Map<string, number>;
+  onOpenPlayer?: (playerId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   // The whole field at a glance is the more useful default.
@@ -45,7 +48,9 @@ export function LeaderboardList({
         </button>
       )}
 
-      {showAll && locked ? <RosterGrid rows={rows} contest={contest} pointDeltas={pointDeltas} /> : null}
+      {showAll && locked ? (
+        <RosterGrid rows={rows} contest={contest} pointDeltas={pointDeltas} onOpenPlayer={onOpenPlayer} />
+      ) : null}
 
       {showAll && locked
         ? null
@@ -99,7 +104,11 @@ export function LeaderboardList({
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {line.player ? (
                             <>
-                              {line.player.name}
+                              <PlayerName
+                                name={line.player.name}
+                                playerId={line.player.id}
+                                onOpenPlayer={onOpenPlayer}
+                              />
                               <span className="faint">
                                 {' '}
                                 {line.player.position} · {line.player.teamAbbr}

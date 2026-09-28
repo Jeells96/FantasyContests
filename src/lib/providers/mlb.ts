@@ -2,6 +2,7 @@ import type { ContestTeam, GameState, StatMap } from '../../types';
 import { applyDerivedStats } from '../stats';
 import { getJson, mapLimitSettled, toNumber } from './http';
 import type {
+  GamePlay,
   BuildPoolOptions,
   GameSituation,
   LiveGameStats,
@@ -21,6 +22,9 @@ import type {
  */
 
 const API = 'https://statsapi.mlb.com/api/v1';
+
+/** How many recent plays are carried for attributing score changes. */
+const PLAY_WINDOW = 40;
 const LEAGUE_AVERAGE_ERA = 4.1;
 
 const HITTING_MAP: Record<string, string> = {
@@ -338,9 +342,13 @@ export class MlbProvider implements SportProvider {
 
   async fetchLive(game: ProviderGame): Promise<LiveGameStats> {
     const date = game.startTime.slice(0, 10);
-    const [box, schedule] = await Promise.all([
+    const [box, schedule, playByPlay] = await Promise.all([
       getJson<any>(`${API}/game/${game.id}/boxscore`, { cacheMs: 0 }),
       this.fetchSchedule(date, 15_000).catch(() => null),
+      // Only worth a request once there are plays to attribute anything to.
+      game.state === 'pre'
+        ? Promise.resolve(null)
+        : getJson<any>(`${API}/game/${game.id}/playByPlay`, { cacheMs: 0 }).catch(() => null),
     ]);
 
     let state: GameState = game.state;
@@ -401,7 +409,49 @@ export class MlbProvider implements SportProvider {
       clock: inningOrdinal ? `${half || ''} ${inningOrdinal}`.trim() : undefined,
       detail: live ? `${balls}-${strikes}, ${outs} out${outs === 1 ? '' : 's'}` : undefined,
     };
+    const plays = readPlays(playByPlay, { awayScore, homeScore });
 
-    return { gameId: game.id, state, statusDetail, homeScore, awayScore, winnerTeamId, players, situation };
+    return { gameId: game.id, state, statusDetail, homeScore, awayScore, winnerTeamId, players, situation, plays };
   }
+}
+
+/**
+ * The tail of the at-bat feed, oldest first.
+ *
+ * Baseball names both the batter and the pitcher on every play, so a score
+ * change can be pinned to the at-bat that caused it rather than to wherever the
+ * game currently stands.
+ */
+function readPlays(playByPlay: any, scores: { awayScore: number; homeScore: number }): GamePlay[] {
+  const all: any[] = Array.isArray(playByPlay?.allPlays) ? playByPlay.allPlays : [];
+  if (all.length === 0) return [];
+  return all.slice(-PLAY_WINDOW).map((play, index) => {
+    const about = play?.about ?? {};
+    const count = play?.count ?? {};
+    const result = play?.result ?? {};
+    const half = String(about.halfInning ?? '');
+    const inning = toNumber(about.inning);
+    const outs = toNumber(count.outs);
+    const athleteIds = [play?.matchup?.batter?.id, play?.matchup?.pitcher?.id]
+      .filter((id) => id !== undefined && id !== null)
+      .map((id) => String(id));
+    return {
+      id: String(play?.atBatIndex ?? index),
+      detail: `${toNumber(count.balls)}-${toNumber(count.strikes)}, ${outs} out${outs === 1 ? '' : 's'}`,
+      clock: inning > 0 ? `${half ? half[0].toUpperCase() + half.slice(1) : ''} ${ordinalInning(inning)}`.trim() : undefined,
+      awayScore: typeof result.awayScore === 'number' ? result.awayScore : scores.awayScore,
+      homeScore: typeof result.homeScore === 'number' ? result.homeScore : scores.homeScore,
+      text: typeof result.description === 'string' ? result.description : undefined,
+      athleteIds: athleteIds.length > 0 ? athleteIds : undefined,
+      scoring: toNumber(result.rbi) > 0,
+      turnover: false,
+    } satisfies GamePlay;
+  });
+}
+
+function ordinalInning(inning: number): string {
+  const rest = inning % 100;
+  if (rest >= 11 && rest <= 13) return `${inning}th`;
+  const suffix = ['th', 'st', 'nd', 'rd'][inning % 10] ?? 'th';
+  return `${inning}${suffix}`;
 }

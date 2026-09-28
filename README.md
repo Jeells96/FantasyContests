@@ -30,7 +30,11 @@ statistical events.
   moves on to the game-winner picks, and becomes *Submit* once those are made. Saving goes straight to the
   leaderboard.
 - Make a game-winner pick for every game when the admin enables it.
-- Watch a live leaderboard with broadcast-style scoring animations.
+- Watch a live leaderboard with broadcast-style scoring animations, and a green "+4.6" on any player the
+  moment they add points — on your lineup, the leaderboard and the scoring tab alike.
+- A **Scoring** tab with the best lineup the pool currently allows (the perfect lineup once games are final),
+  a live feed of every player who scores with tags showing who rosters them, and the pool ranked by points.
+- A leaderboard toggle that opens every entrant's roster at once.
 
 **For admins** (PIN `2325`)
 - Create a contest from any combination of NFL, MLB and NBA games on a date range.
@@ -234,6 +238,13 @@ contest). Because the premium is real cap space, the salary cap and the scoring 
 it: the cheapest measured lineup captains its cheapest player, every other measured lineup captains its most
 expensive, and the baseline adds the bonus on its strongest projection. Contests created before captains
 existed have no `captain` field, which reads as disabled.
+
+### Best possible lineup (`src/lib/engine/optimal.ts`)
+The highest score the pool allows under the contest's own rules — roster size, salary cap and the captain
+multiplier — since a lineup breaking them was never available to anyone. With interchangeable spots it is
+solved exactly, as a knapsack over salary in hundreds with one slot reserved for the captain; position-locked
+rosters fall back to a greedy fill, which the result reports as inexact. Checked against brute force over 40
+randomised pools.
 
 ### Spread picks (`src/lib/engine/spread.ts`)
 Picks are made against the point spread. The line is read from SportsGameOdds when the contest is created and

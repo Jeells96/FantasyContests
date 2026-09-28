@@ -10,6 +10,8 @@ import { ScoreOverlay } from '../components/ScoreOverlay';
 import { Banner, Empty, KeyValue, Spinner, SportPill, StatusPill } from '../components/ui';
 import { useContestData } from '../hooks/useContestData';
 import { useScoringEvents } from '../hooks/useScoringEvents';
+import { usePointDeltas } from '../hooks/usePointDeltas';
+import { ScoringTab } from '../components/ScoringTab';
 import { useLiveSync } from '../hooks/useLiveSync';
 import { saveEntry } from '../lib/db';
 import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
@@ -23,7 +25,7 @@ import { statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
 import { SPORT_LABELS, type ContestPlayer, type LineupSelection, type Sport } from '../types';
 
-type Tab = 'lineup' | 'board' | 'info';
+type Tab = 'lineup' | 'board' | 'scoring' | 'info';
 type SortKey = 'salary' | 'projection' | 'points';
 
 export function ContestPage() {
@@ -70,6 +72,8 @@ export function ContestPage() {
   const { events } = useScoringEvents(contest, players, myPlayerIds, locked && status !== 'complete');
   // Anyone watching a live contest keeps its scores moving.
   useLiveSync(contest, status === 'live');
+  // Who just scored, shown everywhere a player appears.
+  const pointDeltas = usePointDeltas(players, locked);
 
   const cap = contest?.salaryCapInfo.cap ?? 0;
   const hasCaptain = captainEnabled(contest);
@@ -313,14 +317,22 @@ export function ContestPage() {
         </div>
 
         <div className="tabs">
-          {(['lineup', 'board', 'info'] as Tab[]).map((key) => (
+          {(['lineup', 'board', 'scoring', 'info'] as Tab[]).map((key) => (
             <button
               key={key}
               type="button"
               className={`tab${tab === key ? ' tab--active' : ''}`}
               onClick={() => setTab(key)}
             >
-              {key === 'lineup' ? (locked ? 'My lineup' : 'Build lineup') : key === 'board' ? 'Leaderboard' : 'Contest info'}
+              {key === 'lineup'
+                ? locked
+                  ? 'My lineup'
+                  : 'Build lineup'
+                : key === 'board'
+                  ? 'Leaderboard'
+                  : key === 'scoring'
+                    ? 'Scoring'
+                    : 'Info'}
             </button>
           ))}
         </div>
@@ -337,6 +349,7 @@ export function ContestPage() {
               hasEntry={Boolean(myEntry)}
               points={myRow?.total ?? 0}
               bonus={myRow?.bonusPoints ?? 0}
+              pointDeltas={pointDeltas}
             />
           ) : (
             <div className="grid grid--builder">
@@ -482,7 +495,20 @@ export function ContestPage() {
           )
         ) : null}
 
-        {tab === 'board' ? <LeaderboardList rows={leaderboard} contest={contest} locked={locked} /> : null}
+        {tab === 'board' ? (
+          <LeaderboardList rows={leaderboard} contest={contest} locked={locked} pointDeltas={pointDeltas} />
+        ) : null}
+
+        {tab === 'scoring' ? (
+          <ScoringTab
+            contest={contest}
+            players={players}
+            entries={locked ? entries : myEntry ? [myEntry] : []}
+            pointDeltas={pointDeltas}
+            locked={locked}
+            selfUid={uid}
+          />
+        ) : null}
 
         {tab === 'info' ? <ContestInfo contest={contest} /> : null}
       </div>
@@ -546,6 +572,7 @@ function LockedLineup({
   hasEntry,
   points,
   bonus,
+  pointDeltas,
 }: {
   contest: import('../types').Contest;
   playersById: Map<string, ContestPlayer>;
@@ -554,6 +581,7 @@ function LockedLineup({
   hasEntry: boolean;
   points: number;
   bonus: number;
+  pointDeltas: Map<string, number>;
 }) {
   if (!hasEntry) {
     return (
@@ -594,6 +622,7 @@ function LockedLineup({
           lineup={lineup}
           playersById={playersById}
           captainMultiplier={captainEnabled(contest) ? captainMultiplier(contest) : null}
+          pointDeltas={pointDeltas}
           live
           readOnly
         />

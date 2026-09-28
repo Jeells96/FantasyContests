@@ -22,7 +22,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { fetchLiveForGames } from '../src/lib/providers/index';
-import { applyLiveResults, poolChunkSignature } from '../src/lib/engine/liveSync';
+import { applyLiveResults, mergeScoringLog, poolChunkSignature } from '../src/lib/engine/liveSync';
 import { allGamesFinal, deriveStatus, isContestLocked } from '../src/lib/engine/contestState';
 import { buildLeaderboard, toResults } from '../src/lib/engine/leaderboard';
 import type { Contest, ContestPlayer, Entry, Standing } from '../src/types';
@@ -105,7 +105,7 @@ async function syncContest(db: Firestore, contest: Contest): Promise<void> {
   }
 
   const live = await fetchLiveForGames(contest.games);
-  const { games, players, status, scoringPlayers } = applyLiveResults(contest, pool, live);
+  const { games, players, status, scoringPlayers, events } = applyLiveResults(contest, pool, live);
   const chunks = await writePool(db, contest.id, players);
 
   const standingsSnapshot = await getDocs(collection(db, 'contests', contest.id, 'standings'));
@@ -115,6 +115,7 @@ async function syncContest(db: Firestore, contest: Contest): Promise<void> {
     games,
     status,
     entrantCount,
+    scoringLog: mergeScoringLog(contest.scoringLog, events),
     updatedAt: new Date().toISOString(),
   };
 

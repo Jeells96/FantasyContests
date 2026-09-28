@@ -15,6 +15,7 @@ export function RosterPanel({
   onRemove,
   onToggleCaptain,
   captainMultiplier,
+  pointDeltas,
   live,
   readOnly,
 }: {
@@ -27,6 +28,8 @@ export function RosterPanel({
   onToggleCaptain?: (slotId: string) => void;
   /** Set when the contest has captains, which also enables the CPT control. */
   captainMultiplier?: number | null;
+  /** playerId -> contest points just added. */
+  pointDeltas?: Map<string, number>;
   live?: boolean;
   readOnly?: boolean;
 }) {
@@ -43,9 +46,11 @@ export function RosterPanel({
         const isCaptain = slot.id === captainSlotId;
         const playerId = bySlot.get(slot.id);
         const player = playerId ? playersById.get(playerId) : undefined;
+        const justScored = player ? (pointDeltas?.get(player.id) ?? 0) > 0 : false;
         const classes = [
           'slot',
           player ? 'slot--filled' : '',
+          justScored ? 'slot--scored' : '',
           isCaptain ? 'slot--captain' : '',
           activeSlotId === slot.id ? 'slot--active' : '',
         ]
@@ -94,6 +99,14 @@ export function RosterPanel({
                     {(
                       (player.normalizedPoints ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
                     ).toFixed(1)}
+                    {(pointDeltas?.get(player.id) ?? 0) > 0 ? (
+                      <span className="delta-pop">
+                        +
+                        {(
+                          (pointDeltas?.get(player.id) ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
+                        ).toFixed(1)}
+                      </span>
+                    ) : null}
                   </span>
                 ) : (
                   <span className={`player__salary${isCaptain ? ' player__salary--captain' : ''}`}>

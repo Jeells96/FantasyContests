@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { getContest, getPool, patchContest, writeLivePool } from '../lib/db';
 import { deriveStatus } from '../lib/engine/contestState';
-import { applyLiveResults } from '../lib/engine/liveSync';
+import { applyLiveResults, mergeScoringLog } from '../lib/engine/liveSync';
 import { fetchLiveForGames } from '../lib/providers';
 import type { Contest } from '../types';
 
@@ -45,9 +45,14 @@ export function useLiveSync(contest: Contest | null, enabled: boolean): void {
         const live = await fetchLiveForGames(fresh.games);
         if (live.length === 0) return;
 
-        const { games, players, status } = applyLiveResults(fresh, pool, live);
+        const { games, players, status, events } = applyLiveResults(fresh, pool, live);
         await writeLivePool(contestId, players);
-        await patchContest(contestId, { games, status, lastSyncAt: new Date().toISOString() });
+        await patchContest(contestId, {
+          games,
+          status,
+          scoringLog: mergeScoringLog(fresh.scoringLog, events),
+          lastSyncAt: new Date().toISOString(),
+        });
       } catch {
         // A failed round is not worth surfacing; the next tick retries.
       } finally {

@@ -13,6 +13,8 @@ export interface PlayerCardProps {
   captain?: boolean;
   /** Salary and points multiplier applied to the captain. */
   captainMultiplier?: number;
+  /** Contest points this player just added, shown as a green pop. */
+  pointsDelta?: number;
   onClick?: () => void;
   onInfo?: () => void;
 }
@@ -30,6 +32,7 @@ export function PlayerCard({
   live,
   captain,
   captainMultiplier = 1.5,
+  pointsDelta,
   onClick,
   onInfo,
 }: PlayerCardProps) {
@@ -41,8 +44,10 @@ export function PlayerCard({
   const projection = captain
     ? Math.round(player.projection.normalized * captainMultiplier * 10) / 10
     : player.projection.normalized;
+  const shownDelta = pointsDelta ? Math.round(pointsDelta * (captain ? captainMultiplier : 1) * 10) / 10 : 0;
   const classes = [
     'player',
+    shownDelta > 0 ? 'player--scored' : '',
     captain ? 'player--captain' : '',
     selected ? 'player--selected' : '',
     used && !selected ? 'player--used' : '',
@@ -96,7 +101,10 @@ export function PlayerCard({
         <span className={`player__salary${captain ? ' player__salary--captain' : ''}`}>{formatMoney(salary)}</span>
         {live ? (
           <>
-            <span className="player__points">{points.toFixed(1)} pts</span>
+            <span className="player__points">
+              {points.toFixed(1)} pts
+              {shownDelta > 0 ? <span className="delta-pop">+{shownDelta.toFixed(1)}</span> : null}
+            </span>
             {showRaw ? <span className="player__proj">raw {(player.rawPoints ?? 0).toFixed(1)}</span> : null}
           </>
         ) : (

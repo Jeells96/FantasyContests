@@ -1,4 +1,4 @@
-import type { Contest, ContestGame, ContestPlayer } from '../../types';
+import type { Contest, ContestGame, ContestPlayer, ScoringLogEntry } from '../../types';
 import type { LiveGameStats } from '../providers/types';
 import { computeRawFantasyPoints } from '../scoring';
 import { formatStatLine, hasActivity } from '../stats';
@@ -11,7 +11,14 @@ export interface LiveSyncResult {
   status: Contest['status'];
   /** Players currently holding a non-zero score. */
   scoringPlayers: number;
+  /** Point increases in this round, newest first. */
+  events: ScoringLogEntry[];
 }
+
+/** Ignore rounding noise; only real scoring is logged. */
+const MIN_DELTA = 0.05;
+/** How much of the feed the contest keeps. */
+export const SCORING_LOG_LIMIT = 80;
 
 /**
  * Fold a round of live feed results into a contest's games and player pool.
@@ -59,12 +66,43 @@ export function applyLiveResults(
     };
   });
 
+  // Compare against what the pool held before this round to build the feed.
+  const previousPoints = new Map(pool.map((player) => [player.id, player.normalizedPoints ?? 0]));
+  const at = new Date().toISOString();
+  const events: ScoringLogEntry[] = [];
+  for (const player of players) {
+    const before = previousPoints.get(player.id) ?? 0;
+    const after = player.normalizedPoints ?? 0;
+    const delta = round2(after - before);
+    if (delta < MIN_DELTA) continue;
+    events.push({
+      id: `${player.id}-${at}`,
+      playerId: player.id,
+      playerName: player.name,
+      teamAbbr: player.teamAbbr,
+      sport: player.sport,
+      headshot: player.headshot,
+      delta,
+      total: round2(after),
+      statLine: player.statLine,
+      at,
+    });
+  }
+  events.sort((a, b) => b.delta - a.delta);
+
   return {
     games,
     players,
     status: deriveStatus({ ...contest, games }),
     scoringPlayers: players.filter((player) => (player.normalizedPoints ?? 0) !== 0).length,
+    events,
   };
+}
+
+/** Newest first, oldest trimmed. */
+export function mergeScoringLog(existing: ScoringLogEntry[] | undefined, events: ScoringLogEntry[]): ScoringLogEntry[] {
+  if (events.length === 0) return existing ?? [];
+  return [...events, ...(existing ?? [])].slice(0, SCORING_LOG_LIMIT);
 }
 
 function round2(value: number): number {

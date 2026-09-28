@@ -211,6 +211,23 @@ export interface ContestResultsEntry {
   total: number;
 }
 
+/** One player's points going up, recorded so the scoring feed survives reloads. */
+export interface ScoringLogEntry {
+  id: string;
+  playerId: string;
+  playerName: string;
+  teamAbbr: string;
+  sport: Sport;
+  headshot?: string;
+  /** Contest points added by this update. */
+  delta: number;
+  /** The player's contest points after it. */
+  total: number;
+  /** Stat line at the time, for context. */
+  statLine?: string;
+  at: string;
+}
+
 export interface Contest {
   id: string;
   name: string;
@@ -234,6 +251,8 @@ export interface Contest {
   finalizedAt?: string | null;
   /** When live scoring last ran, used to stop every open tab syncing at once. */
   lastSyncAt?: string | null;
+  /** Newest first, capped; the contest's scoring feed. */
+  scoringLog?: ScoringLogEntry[];
   results?: ContestResultsEntry[];
   playerCount: number;
   entrantCount: number;

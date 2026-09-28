@@ -69,6 +69,7 @@ function contestFromDoc(id: string, data: DocumentData): Contest {
     status: data.status ?? 'open',
     finalizedAt: data.finalizedAt ?? null,
     lastSyncAt: data.lastSyncAt ?? null,
+    scoringLog: data.scoringLog ?? [],
     results: data.results ?? undefined,
     playerCount: data.playerCount ?? 0,
     entrantCount: data.entrantCount ?? 0,

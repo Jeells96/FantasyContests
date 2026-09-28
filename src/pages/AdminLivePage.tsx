@@ -12,7 +12,7 @@ import {
 } from '../lib/db';
 import { allGamesFinal, deriveStatus } from '../lib/engine/contestState';
 import { buildLeaderboard, toResults } from '../lib/engine/leaderboard';
-import { applyLiveResults } from '../lib/engine/liveSync';
+import { applyLiveResults, mergeScoringLog } from '../lib/engine/liveSync';
 import { fetchLiveForGames } from '../lib/providers';
 import { useSession } from '../state/SessionContext';
 import type { Contest, ContestPlayer } from '../types';
@@ -71,11 +71,16 @@ export function AdminLivePage() {
       if (!current) throw new Error('Contest missing');
 
       const live = await fetchLiveForGames(current.games);
-      const { games, players: updated, status, scoringPlayers } = applyLiveResults(current, pool, live);
+      const { games, players: updated, status, scoringPlayers, events } = applyLiveResults(current, pool, live);
 
       const chunks = await writeLivePool(contestId, updated);
       const entrants = await countEntrants(contestId).catch(() => current.entrantCount);
-      await patchContest(contestId, { games, status, entrantCount: entrants });
+      await patchContest(contestId, {
+        games,
+        status,
+        entrantCount: entrants,
+        scoringLog: mergeScoringLog(current.scoringLog, events),
+      });
 
       setPlayers(updated);
       setContest({ ...current, games, status, entrantCount: entrants });

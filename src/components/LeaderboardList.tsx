@@ -13,12 +13,15 @@ export function LeaderboardList({
   rows,
   contest,
   locked,
+  pointDeltas,
 }: {
   rows: LeaderboardRow[];
   contest: Contest;
   locked: boolean;
+  pointDeltas?: Map<string, number>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   if (rows.length === 0) {
     return <Empty title="No entries yet" hint="Be the first to build a lineup." />;
@@ -28,12 +31,20 @@ export function LeaderboardList({
     <div className="list">
       {!locked ? (
         <div className="banner banner--warn">
-          Rosters and game-winner picks stay hidden until the first game starts. Scoring begins at lock.
+          Rosters and spread picks stay hidden until the first game starts. Scoring begins at lock.
         </div>
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          className={`btn btn--sm${showAll ? ' btn--primary' : ''}`}
+          onClick={() => setShowAll((value) => !value)}
+        >
+          {showAll ? 'Hide all rosters' : 'Show every roster'}
+        </button>
+      )}
 
       {rows.map((row) => {
-        const open = expanded === row.uid;
+        const open = showAll || expanded === row.uid;
         return (
           <div key={row.uid}>
             <button
@@ -98,6 +109,15 @@ export function LeaderboardList({
                         <span className="num faint">{line.player ? formatMoney(line.salary) : ''}</span>
                         <span className="num" style={{ fontWeight: 800, minWidth: 54, textAlign: 'right' }}>
                           {line.normalizedPoints.toFixed(1)}
+                          {line.player && (pointDeltas?.get(line.player.id) ?? 0) > 0 ? (
+                            <span className="delta-pop">
+                              +
+                              {(
+                                (pointDeltas?.get(line.player.id) ?? 0) *
+                                (line.isCaptain ? contest.captain?.multiplier ?? 1.5 : 1)
+                              ).toFixed(1)}
+                            </span>
+                          ) : null}
                           {line.player && line.player.sport !== 'nfl' ? (
                             <div className="tiny faint">raw {line.rawPoints.toFixed(1)}</div>
                           ) : null}

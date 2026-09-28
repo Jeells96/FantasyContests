@@ -24,6 +24,7 @@
   --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.3);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --nfl: #6ea8ff;
+  --ncaaf: #b18eff;
   --mlb: #ff8f6e;
   --nba: #ffce6e;
   color-scheme: dark;
@@ -293,6 +294,12 @@ h4 {
   color: var(--nfl);
   border-color: rgba(110, 168, 255, 0.4);
   background: rgba(110, 168, 255, 0.12);
+}
+
+.pill--ncaaf {
+  color: var(--ncaaf);
+  border-color: rgba(177, 142, 255, 0.4);
+  background: rgba(177, 142, 255, 0.12);
 }
 
 .pill--mlb {

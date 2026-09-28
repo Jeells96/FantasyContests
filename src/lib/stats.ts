@@ -117,12 +117,15 @@ export const NBA_STATS: StatMeta[] = [
 
 export const STATS_BY_SPORT: Record<Sport, StatMeta[]> = {
   nfl: NFL_STATS,
+  // College football is the same game, so it shares the football vocabulary.
+  ncaaf: NFL_STATS,
   mlb: MLB_STATS,
   nba: NBA_STATS,
 };
 
 const INDEX: Record<Sport, Record<string, StatMeta>> = {
   nfl: Object.fromEntries(NFL_STATS.map((s) => [s.key, s])),
+  ncaaf: Object.fromEntries(NFL_STATS.map((s) => [s.key, s])),
   mlb: Object.fromEntries(MLB_STATS.map((s) => [s.key, s])),
   nba: Object.fromEntries(NBA_STATS.map((s) => [s.key, s])),
 };
@@ -169,16 +172,19 @@ export function applyDerivedStats(sport: Sport, stats: StatMap): StatMap {
 }
 
 /** Stat-line priority per sport/role for the compact player-card summary. */
-const LINE_KEYS: Record<Sport, Record<string, string[]>> = {
-  nfl: {
+const FOOTBALL_LINE_KEYS: Record<string, string[]> = {
     QB: ['passYds', 'passTD', 'passInt', 'rushYds', 'rushTD'],
     RB: ['rushAtt', 'rushYds', 'rushTD', 'rec', 'recYds', 'recTD'],
     WR: ['rec', 'recYds', 'recTD', 'rushYds'],
     TE: ['rec', 'recYds', 'recTD'],
     K: ['fgMade', 'fgMissed', 'xpMade'],
     DST: ['dstPtsAllowed', 'dstSack', 'dstInt', 'dstFumRec', 'dstTD'],
-    default: ['rushYds', 'rec', 'recYds', 'passYds'],
-  },
+  default: ['rushYds', 'rec', 'recYds', 'passYds'],
+};
+
+const LINE_KEYS: Record<Sport, Record<string, string[]>> = {
+  nfl: FOOTBALL_LINE_KEYS,
+  ncaaf: FOOTBALL_LINE_KEYS,
   mlb: {
     P: ['pitchIP', 'pitchSO', 'pitchER', 'pitchH', 'pitchBB'],
     SP: ['pitchIP', 'pitchSO', 'pitchER', 'pitchH', 'pitchBB'],

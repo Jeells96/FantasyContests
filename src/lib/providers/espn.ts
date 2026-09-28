@@ -37,6 +37,12 @@ interface EspnSportConfig {
   namespacedBox: boolean;
   /** League average implied team total, for the game-context multiplier. */
   leagueAverageTeamTotal: number;
+  /**
+   * Read season production from each player's own game log rather than from the
+   * league-wide statistics endpoint. College football needs this: that endpoint
+   * lists every athlete but carries no production for any of them.
+   */
+  seasonFromGamelog?: boolean;
 }
 
 const NFL_CONFIG: EspnSportConfig = {
@@ -99,6 +105,15 @@ const NFL_CONFIG: EspnSportConfig = {
   leagueAverageTeamTotal: 22.5,
 };
 
+/** College football is the same game on the same feed, just a bigger league. */
+const NCAAF_CONFIG: EspnSportConfig = {
+  ...NFL_CONFIG,
+  path: 'football/college-football',
+  // College offenses score more than the pros, which shifts game context.
+  leagueAverageTeamTotal: 27.5,
+  seasonFromGamelog: true,
+};
+
 const NBA_CONFIG: EspnSportConfig = {
   path: 'basketball/nba',
   keepPositions: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'GF', 'FC'],
@@ -153,9 +168,20 @@ const NBA_CONFIG: EspnSportConfig = {
   leagueAverageTeamTotal: 113,
 };
 
-const CONFIGS: Partial<Record<Sport, EspnSportConfig>> = { nfl: NFL_CONFIG, nba: NBA_CONFIG };
+const CONFIGS: Partial<Record<Sport, EspnSportConfig>> = {
+  nfl: NFL_CONFIG,
+  ncaaf: NCAAF_CONFIG,
+  nba: NBA_CONFIG,
+};
 
 /** League-average NFL team defense production per game, used for D/ST baselines. */
+/** Ceiling on per-player game log requests when a pool needs them all. */
+const GAMELOG_POOL_LIMIT = 320;
+
+function isFootball(sport: Sport): boolean {
+  return sport === 'nfl' || sport === 'ncaaf';
+}
+
 /** ESPN pays a field goal by how far it was. */
 function fieldGoalBand(yards: number): string {
   if (yards >= 60) return 'fgMade60';
@@ -188,7 +214,7 @@ export function seasonForDate(sport: Sport, date: Date): number {
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + 1;
   if (sport === 'nba') return month >= 9 ? year + 1 : year;
-  if (sport === 'nfl') return month >= 3 ? year : year - 1;
+  if (sport === 'nfl' || sport === 'ncaaf') return month >= 3 ? year : year - 1;
   return year;
 }
 
@@ -308,23 +334,67 @@ export class EspnProvider implements SportProvider {
         });
       }
 
-      if (this.sport === 'nfl') {
+      if (isFootball(this.sport)) {
         players.push(this.buildTeamDefense(job, impliedAgainst));
       }
     });
 
-    await this.enrichRecentForm(players, season, options, progress);
+    if (this.config.seasonFromGamelog) {
+      await this.loadSeasonFromGamelogs(players, season, progress);
+    } else {
+      await this.enrichRecentForm(players, season, options, progress);
+    }
     return players;
+  }
+
+  /**
+   * Season production one player at a time, from their own game log.
+   *
+   * The league-wide endpoint lists every college athlete but carries no
+   * production for any of them, so the log is the only place the numbers exist.
+   * One request per player is the cost; recent form falls out of the same log,
+   * so nothing else has to be fetched afterwards.
+   */
+  private async loadSeasonFromGamelogs(
+    players: PoolPlayer[],
+    season: number,
+    progress: (m: string) => void,
+  ): Promise<void> {
+    const candidates = players.filter((player) => !player.isTeamUnit).slice(0, GAMELOG_POOL_LIMIT);
+    if (candidates.length === 0) return;
+    progress(`Reading season statistics for ${candidates.length} players…`);
+
+    const logs = await mapLimitSettled(candidates, 8, (player) =>
+      getJson<any>(`${WEB}/${this.config.path}/athletes/${player.id}/gamelog?season=${season}`, {
+        cacheMs: 10 * 60_000,
+        retries: 1,
+      }),
+    );
+
+    candidates.forEach((player, index) => {
+      const log = logs[index];
+      if (!log) return;
+      const full = this.parseGamelog(log, Number.MAX_SAFE_INTEGER);
+      if (full) {
+        player.seasonStats = full.perGame;
+        player.gamesPlayed = full.games;
+      }
+      const recent = this.parseGamelog(log, 5);
+      if (recent) {
+        player.recentStats = recent.perGame;
+        player.recentGames = recent.games;
+      }
+    });
   }
 
   private buildTeamDefense(
     job: { game: ProviderGame; team: { id: string; abbreviation: string; displayName: string; logo?: string }; opponent: { abbreviation: string }; isHome: boolean },
     impliedAgainst: number | undefined,
   ): PoolPlayer {
-    const pointsAllowed = impliedAgainst ?? NFL_CONFIG.leagueAverageTeamTotal;
+    const pointsAllowed = impliedAgainst ?? this.config.leagueAverageTeamTotal;
     return {
       id: `dst-${job.team.id}`,
-      sport: 'nfl',
+      sport: this.sport,
       name: `${job.team.displayName} D/ST`,
       shortName: `${job.team.abbreviation} D/ST`,
       position: 'DST',
@@ -536,14 +606,14 @@ export class EspnProvider implements SportProvider {
       }
     }
 
-    if (this.sport === 'nfl') {
+    if (isFootball(this.sport)) {
       this.addTeamDefenseStats(summary, game, players, { homeScore, awayScore });
     }
 
     // The whole feed, not just the tail: a first-quarter field goal still has
     // to count in the fourth.
     const allPlays = this.readPlays(summary, { homeScore, awayScore });
-    if (this.sport === 'nfl') {
+    if (isFootball(this.sport)) {
       this.addPlayDerivedStats(summary, allPlays, players);
     }
 
@@ -580,7 +650,7 @@ export class EspnProvider implements SportProvider {
 
     // Basketball summaries carry no clock on the header, so the period and
     // clock come from the last play instead.
-    if (this.sport !== 'nfl') {
+    if (!isFootball(this.sport)) {
       const plays: any[] = Array.isArray(summary?.plays) ? summary.plays : [];
       const last = plays[plays.length - 1];
       const lastPeriod = Number(last?.period?.number ?? period);
@@ -626,7 +696,7 @@ export class EspnProvider implements SportProvider {
    */
   private readPlays(summary: any, scores: { homeScore: number; awayScore: number }): GamePlay[] {
     const raw: any[] =
-      this.sport === 'nfl'
+      isFootball(this.sport)
         ? [
             ...((summary?.drives?.previous ?? []).flatMap((drive: any) => drive?.plays ?? []) as any[]),
             ...(summary?.drives?.current?.plays ?? []),
@@ -661,7 +731,7 @@ export class EspnProvider implements SportProvider {
         play?.team?.id;
       return {
         id: String(play?.id ?? `${index}`),
-        detail: this.sport === 'nfl' && down > 0 ? `${ordinal(down)} & ${distance}` : undefined,
+        detail: isFootball(this.sport) && down > 0 ? `${ordinal(down)} & ${distance}` : undefined,
         clock: period > 0 ? `${ordinalPeriod(this.sport, period)}${clock ? ` ${clock}` : ''}` : undefined,
         awayScore: typeof play?.awayScore === 'number' ? play.awayScore : scores.awayScore,
         homeScore: typeof play?.homeScore === 'number' ? play.homeScore : scores.homeScore,
@@ -834,6 +904,24 @@ interface GameContext {
 /** Fallback gamelog key mapping for names the box-score map does not cover. */
 const GAMELOG_FALLBACK: Partial<Record<Sport, Record<string, string>>> = {
   nfl: {
+    passingYards: 'passYds',
+    passingTouchdowns: 'passTD',
+    interceptions: 'passInt',
+    completions: 'passCmp',
+    passingAttempts: 'passAtt',
+    rushingAttempts: 'rushAtt',
+    rushingYards: 'rushYds',
+    rushingTouchdowns: 'rushTD',
+    receptions: 'rec',
+    receivingYards: 'recYds',
+    receivingTouchdowns: 'recTD',
+    receivingTargets: 'targets',
+    fumblesLost: 'fumLost',
+    fieldGoalsMade: 'fgMade',
+    fieldGoalAttempts: 'fgAtt',
+    extraPointsMade: 'xpMade',
+  },
+  ncaaf: {
     passingYards: 'passYds',
     passingTouchdowns: 'passTD',
     interceptions: 'passInt',

@@ -22,6 +22,7 @@ import { topMean } from './projections';
  */
 export const REFERENCE_ANCHORS: Record<Sport, number> = {
   nfl: 14,
+  ncaaf: 14,
   mlb: 9.5,
   nba: 33,
 };

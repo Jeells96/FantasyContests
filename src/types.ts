@@ -7,12 +7,13 @@
  * the contest engine, only adding a provider + a default scoring table.
  */
 
-export type Sport = 'nfl' | 'mlb' | 'nba';
+export type Sport = 'nfl' | 'ncaaf' | 'mlb' | 'nba';
 
-export const SPORTS: Sport[] = ['nfl', 'mlb', 'nba'];
+export const SPORTS: Sport[] = ['nfl', 'ncaaf', 'mlb', 'nba'];
 
 export const SPORT_LABELS: Record<Sport, string> = {
   nfl: 'NFL',
+  ncaaf: 'CFB',
   mlb: 'MLB',
   nba: 'NBA',
 };

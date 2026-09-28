@@ -204,6 +204,12 @@ export async function getContest(contestId: string, database: Firestore = db): P
   return snapshot.exists() ? contestFromDoc(snapshot.id, snapshot.data()) : null;
 }
 
+/** The contests this device is in, read once rather than watched. */
+export async function listMyContestsOnce(uid: string): Promise<Contest[]> {
+  const snapshot = await getDocs(query(collection(db, CONTESTS), where('members', 'array-contains', uid)));
+  return snapshot.docs.map((d) => contestFromDoc(d.id, d.data()));
+}
+
 export async function listContestsOnce(database: Firestore = db): Promise<Contest[]> {
   const snapshot = await getDocs(collection(database, CONTESTS));
   return snapshot.docs.map((d) => contestFromDoc(d.id, d.data()));
@@ -240,6 +246,64 @@ export async function createContest(input: CreateContestInput): Promise<string> 
   writePoolChunks(batch, reference.id, players);
   await batch.commit();
   return reference.id;
+}
+
+/**
+ * Run the same contest again for a different set of people.
+ *
+ * Everything that defines the contest comes across — the games, the player pool
+ * with its salaries, the roster, the scoring, the cap and the frozen lines — so
+ * the two are played on identical terms. What does not come across is who is in
+ * it: the copy gets its own join code, starts with nobody in it and no
+ * invitations, and carries none of the original's entries or scoring.
+ */
+export async function duplicateContest(
+  contestId: string,
+  owner: { id: string; name?: string },
+  name?: string,
+): Promise<string> {
+  const source = await getContest(contestId);
+  if (!source) throw new Error('That contest no longer exists.');
+  const players = await getPool(contestId);
+  if (players.length === 0) throw new Error('That contest has no player pool to copy.');
+
+  const {
+    id: _id,
+    joinCode: _code,
+    members: _members,
+    invites: _invites,
+    inviteKeys: _keys,
+    createdAt: _created,
+    updatedAt: _updated,
+    entrantCount: _entrants,
+    scoringLog: _log,
+    results: _results,
+    lastSyncAt: _synced,
+    finalizedAt: _finalized,
+    ...rest
+  } = source;
+
+  return createContest({
+    ...rest,
+    name: name?.trim() || `${source.name} (copy)`,
+    ownerId: owner.id,
+    ownerName: owner.name ?? source.ownerName,
+    invites: [],
+    inviteKeys: [],
+    status: 'open',
+    finalizedAt: null,
+    scoringLog: [],
+    lastSyncAt: null,
+    // Live points belong to the original; the copy starts from zero.
+    players: players.map((player) => ({
+      ...player,
+      liveStats: undefined,
+      rawPoints: 0,
+      normalizedPoints: 0,
+      started: false,
+      statLine: undefined,
+    })),
+  });
 }
 
 /** Replace a contest's configuration and, optionally, its whole player pool. */

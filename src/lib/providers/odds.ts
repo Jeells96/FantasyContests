@@ -15,7 +15,7 @@ const API_KEY = import.meta.env?.VITE_SPORTSGAMEODDS_KEY ?? 'bf25a8f2a4d5e93017d
 /** Preferred books in order; the consensus line is the fallback. */
 const BOOK_PRIORITY = ['draftkings', 'fanduel', 'betmgm', 'caesars', 'espnbet'];
 
-const LEAGUE_BY_SPORT: Record<Sport, string> = { nfl: 'NFL', mlb: 'MLB', nba: 'NBA' };
+const LEAGUE_BY_SPORT: Record<Sport, string> = { nfl: 'NFL', ncaaf: 'NCAAF', mlb: 'MLB', nba: 'NBA' };
 
 const HOME_SPREAD_ODD_ID = 'points-home-game-sp-home';
 

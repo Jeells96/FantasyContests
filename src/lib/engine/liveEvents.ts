@@ -34,8 +34,7 @@ interface EventRule {
   threshold?: number;
 }
 
-const RULES: Record<Sport, EventRule[]> = {
-  nfl: [
+const FOOTBALL_RULES: EventRule[] = [
     { stat: 'passTD', title: 'TOUCHDOWN!', tone: 'big' },
     { stat: 'rushTD', title: 'TOUCHDOWN!', tone: 'big' },
     { stat: 'recTD', title: 'TOUCHDOWN!', tone: 'big' },
@@ -49,7 +48,11 @@ const RULES: Record<Sport, EventRule[]> = {
     { stat: 'dstFumRec', title: 'FUMBLE RECOVERY', tone: 'good' },
     { stat: 'passInt', title: 'INTERCEPTED', tone: 'bad' },
     { stat: 'fumLost', title: 'FUMBLE LOST', tone: 'bad' },
-  ],
+];
+
+const RULES: Record<Sport, EventRule[]> = {
+  nfl: FOOTBALL_RULES,
+  ncaaf: FOOTBALL_RULES,
   mlb: [
     {
       stat: 'hr',

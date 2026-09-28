@@ -97,6 +97,8 @@ export const DEFAULT_NBA_SCORING: SportScoring = {
 
 export const DEFAULT_SCORING: Record<Sport, SportScoring> = {
   nfl: DEFAULT_NFL_SCORING,
+  // Same game, same scoring: ESPN's college scoring matches its NFL table.
+  ncaaf: DEFAULT_NFL_SCORING,
   mlb: DEFAULT_MLB_SCORING,
   nba: DEFAULT_NBA_SCORING,
 };

@@ -12,9 +12,9 @@ import {
 } from '../lib/people';
 import { DEFAULT_ROSTER_SIZE } from '../lib/engine/roster';
 import { useSession } from '../state/SessionContext';
-import type { Sport } from '../types';
+import { SPORTS, type Sport } from '../types';
 
-const SPORTS: Sport[] = ['nfl', 'mlb', 'nba'];
+
 
 /**
  * Admin area.

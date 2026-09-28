@@ -11,6 +11,7 @@ import type { PoolPlayer } from '../providers/types';
  */
 export const DEFAULT_ROSTER_SIZE: Record<Sport, number> = {
   nfl: 9,
+  ncaaf: 9,
   mlb: 11,
   nba: 8,
 };
@@ -30,6 +31,7 @@ export function openRoster(count: number): RosterSlot[] {
 /** Default roster formats. A contest creator can rewrite these. */
 export const DEFAULT_ROSTERS: Record<Sport, RosterSlot[]> = {
   nfl: openRoster(DEFAULT_ROSTER_SIZE.nfl),
+  ncaaf: openRoster(DEFAULT_ROSTER_SIZE.ncaaf),
   mlb: openRoster(DEFAULT_ROSTER_SIZE.mlb),
   nba: openRoster(DEFAULT_ROSTER_SIZE.nba),
 };
@@ -39,8 +41,7 @@ export const DEFAULT_ROSTERS: Record<Sport, RosterSlot[]> = {
  * presets a creator can load when they want a positional contest — the engine
  * enforces whatever positions a slot lists.
  */
-export const POSITIONAL_PRESETS: Record<Sport, RosterSlot[]> = {
-  nfl: [
+const FOOTBALL_PRESET: RosterSlot[] = [
     { id: 'qb', label: 'QB', positions: ['QB'] },
     { id: 'rb1', label: 'RB', positions: ['RB'] },
     { id: 'rb2', label: 'RB', positions: ['RB'] },
@@ -50,7 +51,11 @@ export const POSITIONAL_PRESETS: Record<Sport, RosterSlot[]> = {
     { id: 'flex1', label: 'FLEX', positions: ['RB', 'WR', 'TE'] },
     { id: 'flex2', label: 'FLEX', positions: ['RB', 'WR', 'TE'] },
     { id: 'dst', label: 'DST', positions: ['DST'] },
-  ],
+  ];
+
+export const POSITIONAL_PRESETS: Record<Sport, RosterSlot[]> = {
+  nfl: FOOTBALL_PRESET,
+  ncaaf: FOOTBALL_PRESET,
   mlb: [
     { id: 'p1', label: 'P', positions: ['P'] },
     { id: 'p2', label: 'P', positions: ['P'] },

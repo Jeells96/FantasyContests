@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Banner, Empty, KeyValue, Sheet, Spinner, SportPill, Toggle } from '../components/ui';
 import { createContest, getContest, getPool, updateContest } from '../lib/db';
 import { buildPlayerPool, listGamesRange, type ProviderGame } from '../lib/providers';
@@ -66,7 +66,13 @@ export function ContestBuilderPage() {
   const navigate = useNavigate();
   const editing = Boolean(contestId);
 
-  const [step, setStep] = useState(editing ? 3 : 1);
+  // A duplicate arrives here pointed straight at its invite step.
+  const [query] = useSearchParams();
+  const [step, setStep] = useState(() => {
+    const asked = Number(query.get('step'));
+    if (asked >= 1 && asked <= 4) return asked;
+    return editing ? 3 : 1;
+  });
   const [sports, setSports] = useState<Sport[]>(['nfl']);
   const [date, setDate] = useState(todayISO());
   const [days, setDays] = useState(3);

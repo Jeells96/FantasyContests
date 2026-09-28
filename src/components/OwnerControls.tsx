@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { deleteContest, patchContest } from '../lib/db';
+import { deleteContest, duplicateContest, patchContest } from '../lib/db';
 import { deriveStatus } from '../lib/engine/contestState';
 import { Banner } from './ui';
 import { PullLineButton } from './PullLineButton';
 import { hasSpread } from '../lib/engine/spread';
+import { useSession } from '../state/SessionContext';
 import type { Contest } from '../types';
 
 /**
@@ -16,10 +17,26 @@ import type { Contest } from '../types';
  */
 export function OwnerControls({ contest }: { contest: Contest }) {
   const navigate = useNavigate();
+  const { uid, identity } = useSession();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const status = deriveStatus(contest);
+
+  /** Same contest, different people: the copy lands on its invite step. */
+  async function duplicate() {
+    const name = window.prompt('Name for the copy', `${contest.name} (copy)`);
+    if (name === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const id = await duplicateContest(contest.id, { id: uid, name: identity?.displayName }, name);
+      navigate(`/contest/${id}/edit?step=4`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not duplicate');
+      setBusy(false);
+    }
+  }
 
   async function remove() {
     if (!window.confirm(`Delete "${contest.name}" and every entry in it? This cannot be undone.`)) return;
@@ -68,6 +85,9 @@ export function OwnerControls({ contest }: { contest: Contest }) {
           <Link to={`/contest/${contest.id}/live`} className="btn btn--sm">
             Live scoring
           </Link>
+          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void duplicate()}>
+            Duplicate
+          </button>
           {status !== 'complete' ? (
             <button type="button" className="btn btn--sm btn--ghost" disabled={busy} onClick={() => void finalize()}>
               Mark final

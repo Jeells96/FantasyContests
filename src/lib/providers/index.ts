@@ -6,6 +6,7 @@ import type { BuildPoolOptions, LiveGameStats, PoolPlayer, ProviderGame, SportPr
 
 const providers: Record<Sport, SportProvider> = {
   nfl: new EspnProvider('nfl'),
+  ncaaf: new EspnProvider('ncaaf'),
   mlb: new MlbProvider(),
   nba: new EspnProvider('nba'),
 };

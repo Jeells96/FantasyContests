@@ -15,6 +15,7 @@ import { ScoringTab } from '../components/ScoringTab';
 import { ScoreStrip } from '../components/ScoreStrip';
 import { useLiveSync } from '../hooks/useLiveSync';
 import { usePendingSpreads } from '../hooks/usePendingSpreads';
+import { useCopyableLineups, type CopyableLineup } from '../hooks/useCopyableLineups';
 import { joinContest, saveEntry } from '../lib/db';
 import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
 import { buildLeaderboard } from '../lib/engine/leaderboard';
@@ -77,6 +78,7 @@ export function ContestPage() {
   // Anyone watching a live contest keeps its scores moving.
   const liveSync = useLiveSync(contest, status === 'live');
   usePendingSpreads(contest, status === 'open');
+  const copyable = useCopyableLineups(contest, uid, !locked && tab === 'lineup');
 
   /**
    * A shared link carries the join code, so following one puts you in the
@@ -303,6 +305,37 @@ export function ContestPage() {
     }
   }
 
+  /**
+   * Take a lineup built in another contest with the same rules. It is copied
+   * into this draft, not linked to it: the two entries are separate documents
+   * from here on, so editing one leaves the other alone.
+   */
+  function copyLineupFrom(source: CopyableLineup) {
+    if (
+      lineup.length > 0 &&
+      !window.confirm(`Replace your lineup here with the one from "${source.contest.name}"?`)
+    ) {
+      return;
+    }
+    const inPool = source.lineup.filter((line) => playersById.has(line.playerId));
+    setLineup(inPool);
+    // Only picks for games that still have a line are worth carrying over.
+    setPicks(
+      Object.fromEntries(
+        Object.entries(source.picks).filter(([gameId]) =>
+          contest?.games.some((game) => game.id === gameId && hasSpread(game)),
+        ),
+      ),
+    );
+    setMessage({
+      tone: 'ok',
+      text:
+        inPool.length === source.lineup.length
+          ? `Copied from ${source.contest.name}. Change it however you like — it is your own entry now.`
+          : `Copied ${inPool.length} of ${source.lineup.length} players; the rest are not in this pool.`,
+    });
+  }
+
   // One place to open a player's scoring breakdown, from any list that names them.
   const openPlayer = (playerId: string) => {
     const player = players.find((candidate) => candidate.id === playerId);
@@ -418,6 +451,30 @@ export function ContestPage() {
                   hasCaptain={hasCaptain}
                   multiplier={capMultiplier}
                 />
+
+                {copyable.length > 0 ? (
+                  <div className="card card--tight stack" style={{ gap: 8 }}>
+                    <div>
+                      <div className="eyebrow">Copy a lineup</div>
+                      <div className="tiny faint">
+                        Same games, same roster, same cap. Copying fills this lineup in — it stays a separate
+                        entry, so changing one never changes the other.
+                      </div>
+                    </div>
+                    <div className="row row--wrap" style={{ gap: 6 }}>
+                      {copyable.map((source) => (
+                        <button
+                          key={source.contest.id}
+                          type="button"
+                          className="btn btn--sm"
+                          onClick={() => copyLineupFrom(source)}
+                        >
+                          From {source.contest.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 {teamName ? (
                   <div className="card card--tight teamname">

@@ -34,6 +34,16 @@ export interface PoolPlayer {
   impliedPointsAgainst?: number;
 }
 
+/** Where the game stood when these stats were read. */
+export interface GameSituation {
+  /** "2nd & 10" for football, "Top 5, 1 out" for baseball. */
+  detail?: string;
+  /** "3rd 10:15" / "Q3 5:22". */
+  clock?: string;
+  awayScore: number;
+  homeScore: number;
+}
+
 export interface LiveGameStats {
   gameId: string;
   state: GameState;
@@ -43,6 +53,7 @@ export interface LiveGameStats {
   winnerTeamId: string | null;
   /** playerId -> canonical live stats. Includes synthetic team units. */
   players: Record<string, StatMap>;
+  situation?: GameSituation;
 }
 
 export interface BuildPoolOptions {

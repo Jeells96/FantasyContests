@@ -30,10 +30,14 @@ statistical events.
   moves on to the game-winner picks, and becomes *Submit* once those are made. Saving goes straight to the
   leaderboard.
 - Make a game-winner pick for every game when the admin enables it.
-- Watch a live leaderboard with broadcast-style scoring animations, and a green "+4.6" on any player the
-  moment they add points — on your lineup, the leaderboard and the scoring tab alike.
+- Watch a live leaderboard with broadcast-style scoring animations, and a green "+4.6" — or a red "-2.0" — on
+  any player the moment their score moves, on your lineup, the leaderboard and the scoring tab alike. Badges
+  belong to the latest play: the next one replaces them, so several players light up together if they scored
+  on the same play.
 - A **Scoring** tab with the best lineup the pool currently allows (the perfect lineup once games are final),
-  a live feed of every player who scores with tags showing who rosters them, and the pool ranked by points.
+  a live feed of every scoring change — defenses and losses included — stamped with where the game stood
+  ("2nd & 10 · 3rd 10:15 · LAR 16 - 7 DEN") and tagged with who rosters the player, and the pool ranked by
+  points.
 - A leaderboard toggle that lays every entrant out as a grid of tiles — 3 across for a small group, 4 for a
   full one — so the whole field fits on one screen without scrolling.
 

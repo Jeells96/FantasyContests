@@ -68,13 +68,18 @@ export function applyLiveResults(
 
   // Compare against what the pool held before this round to build the feed.
   const previousPoints = new Map(pool.map((player) => [player.id, player.normalizedPoints ?? 0]));
+  const situations = new Map(live.map((result) => [result.gameId, result.situation]));
+  const gamesById = new Map(games.map((game) => [game.id, game]));
   const at = new Date().toISOString();
   const events: ScoringLogEntry[] = [];
   for (const player of players) {
     const before = previousPoints.get(player.id) ?? 0;
     const after = player.normalizedPoints ?? 0;
     const delta = round2(after - before);
-    if (delta < MIN_DELTA) continue;
+    // Losses count too: a defense giving up a touchdown is scoring news.
+    if (Math.abs(delta) < MIN_DELTA) continue;
+    const situation = situations.get(player.gameId);
+    const game = gamesById.get(player.gameId);
     events.push({
       id: `${player.id}-${at}`,
       playerId: player.id,
@@ -85,10 +90,16 @@ export function applyLiveResults(
       delta,
       total: round2(after),
       statLine: player.statLine,
+      situation: situation?.detail,
+      clock: situation?.clock,
+      scoreLine: game
+        ? `${game.away.abbreviation} ${situation?.awayScore ?? game.away.score ?? 0} - ` +
+          `${situation?.homeScore ?? game.home.score ?? 0} ${game.home.abbreviation}`
+        : undefined,
       at,
     });
   }
-  events.sort((a, b) => b.delta - a.delta);
+  events.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
   return {
     games,

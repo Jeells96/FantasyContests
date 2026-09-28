@@ -45,16 +45,24 @@ export function RosterGrid({
             <div className="rg-lines">
               {row.lines.map((line) => {
                 const delta = line.player ? pointDeltas?.get(line.player.id) ?? 0 : 0;
-                const shown = delta * (line.isCaptain ? captainMultiplier : 1);
+                const shown = Math.round(delta * (line.isCaptain ? captainMultiplier : 1) * 10) / 10;
                 return (
-                  <div className={`rg-line${shown > 0 ? ' rg-line--scored' : ''}`} key={line.slot.id}>
+                  <div
+                    className={`rg-line${shown > 0 ? ' rg-line--scored' : ''}${shown < 0 ? ' rg-line--dropped' : ''}`}
+                    key={line.slot.id}
+                  >
                     <span className="rg-player">
                       {line.isCaptain ? <span className="rg-cpt">C</span> : null}
                       {line.player ? shortName(line.player.name, line.player.teamAbbr) : '—'}
                     </span>
                     <span className="rg-pts">
                       {line.normalizedPoints.toFixed(1)}
-                      {shown > 0 ? <span className="rg-delta">+{shown.toFixed(1)}</span> : null}
+                      {shown !== 0 ? (
+                        <span className={`rg-delta${shown < 0 ? ' rg-delta--down' : ''}`}>
+                          {shown > 0 ? '+' : ''}
+                          {shown.toFixed(1)}
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 );

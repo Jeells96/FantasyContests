@@ -219,12 +219,16 @@ export interface ScoringLogEntry {
   teamAbbr: string;
   sport: Sport;
   headshot?: string;
-  /** Contest points added by this update. */
+  /** Contest points added by this update; negative when a player lost points. */
   delta: number;
   /** The player's contest points after it. */
   total: number;
   /** Stat line at the time, for context. */
   statLine?: string;
+  /** Where the game stood: "2nd & 10", "3rd 10:15", "LA 12 - DEN 10". */
+  situation?: string;
+  clock?: string;
+  scoreLine?: string;
   at: string;
 }
 

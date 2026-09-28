@@ -1,6 +1,6 @@
 import type { ContestPlayer, LineupSelection, RosterSlot } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
-import { Initials } from './ui';
+import { DeltaBadge, Initials } from './ui';
 
 /**
  * The lineup itself: one row per roster slot. Tapping a slot focuses the player
@@ -46,7 +46,7 @@ export function RosterPanel({
         const isCaptain = slot.id === captainSlotId;
         const playerId = bySlot.get(slot.id);
         const player = playerId ? playersById.get(playerId) : undefined;
-        const justScored = player ? (pointDeltas?.get(player.id) ?? 0) > 0 : false;
+        const justScored = player ? (pointDeltas?.get(player.id) ?? 0) !== 0 : false;
         const classes = [
           'slot',
           player ? 'slot--filled' : '',
@@ -99,14 +99,11 @@ export function RosterPanel({
                     {(
                       (player.normalizedPoints ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
                     ).toFixed(1)}
-                    {(pointDeltas?.get(player.id) ?? 0) > 0 ? (
-                      <span className="delta-pop">
-                        +
-                        {(
-                          (pointDeltas?.get(player.id) ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
-                        ).toFixed(1)}
-                      </span>
-                    ) : null}
+                    <DeltaBadge
+                      value={
+                        (pointDeltas?.get(player.id) ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
+                      }
+                    />
                   </span>
                 ) : (
                   <span className={`player__salary${isCaptain ? ' player__salary--captain' : ''}`}>

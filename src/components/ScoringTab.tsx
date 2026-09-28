@@ -3,7 +3,7 @@ import type { Contest, ContestPlayer, Entry } from '../types';
 import { captainEnabled, captainMultiplier } from '../lib/engine/captain';
 import { bestPossibleLineup } from '../lib/engine/optimal';
 import { formatMoney } from '../lib/engine/lineup';
-import { Empty, Initials } from './ui';
+import { DeltaBadge, Empty, Initials, shortPersonName } from './ui';
 
 /**
  * The scoring tab: who is putting up points, who has them, and the best score
@@ -25,6 +25,7 @@ export function ScoringTab({
   selfUid: string | null;
 }) {
   const [showBest, setShowBest] = useState(false);
+  const [showAllFeed, setShowAllFeed] = useState(false);
   const final = contest.status === 'complete';
   const multiplier = captainMultiplier(contest);
 
@@ -33,7 +34,8 @@ export function ScoringTab({
     const map = new Map<string, { label: string; isSelf: boolean; isCaptain: boolean }[]>();
     if (!locked) return map;
     for (const entry of entries) {
-      const label = entry.teamName || entry.displayName;
+      // Short enough to sit under a feed row: "Savannah T."
+      const label = shortPersonName(entry.displayName);
       for (const line of entry.lineup) {
         const list = map.get(line.playerId) ?? [];
         list.push({ label, isSelf: entry.uid === selfUid, isCaptain: Boolean(line.captain) });
@@ -130,34 +132,54 @@ export function ScoringTab({
         </div>
         {log.length === 0 ? (
           <p className="tiny faint" style={{ margin: 0 }}>
-            Nothing yet. Every time a player adds points it shows up here, newest first.
+            Nothing yet. Every time a player gains or loses points it shows up here, newest first.
           </p>
         ) : (
-          <div className="list">
-            {log.map((event) => (
-              <div className="feed" key={event.id}>
-                <span className="feed__shot">
-                  {event.headshot ? (
-                    <img src={event.headshot} alt="" loading="lazy" />
-                  ) : (
-                    <Initials name={event.playerName} />
-                  )}
-                </span>
-                <span style={{ minWidth: 0, flex: 1 }}>
-                  <span className="feed__name">
-                    {event.playerName}
-                    <span className="faint"> · {event.teamAbbr}</span>
+          <>
+            <div className="list">
+              {(showAllFeed ? log : log.slice(0, FEED_PREVIEW)).map((event) => (
+                <div className={`feed feed--compact${event.delta < 0 ? ' feed--down' : ''}`} key={event.id}>
+                  <span className="feed__shot">
+                    {event.headshot ? (
+                      <img src={event.headshot} alt="" loading="lazy" />
+                    ) : (
+                      <Initials name={event.playerName} />
+                    )}
                   </span>
-                  {event.statLine ? <span className="feed__stats">{event.statLine}</span> : null}
-                  <OwnerTags owners={owners.get(event.playerId)} locked={locked} />
-                </span>
-                <span className="feed__delta">
-                  <span className="delta-pop delta-pop--static">+{event.delta.toFixed(1)}</span>
-                  <span className="tiny faint num">{event.total.toFixed(1)} total</span>
-                </span>
-              </div>
-            ))}
-          </div>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span className="feed__name">
+                      {event.playerName}
+                      <span className="faint"> · {event.teamAbbr}</span>
+                    </span>
+                    {event.situation || event.clock || event.scoreLine ? (
+                      <span className="board">
+                        {event.situation ? <span className="board__cell">{event.situation}</span> : null}
+                        {event.clock ? <span className="board__cell">{event.clock}</span> : null}
+                        {event.scoreLine ? (
+                          <span className="board__cell board__cell--score">{event.scoreLine}</span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                    <OwnerTags owners={owners.get(event.playerId)} locked={locked} />
+                  </span>
+                  <span className="feed__delta">
+                    <DeltaBadge value={event.delta} className="delta-pop--static" />
+                    <span className="tiny faint num">{event.total.toFixed(1)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            {log.length > FEED_PREVIEW ? (
+              <button
+                type="button"
+                className="btn btn--sm btn--ghost btn--block"
+                style={{ marginTop: 8 }}
+                onClick={() => setShowAllFeed((value) => !value)}
+              >
+                {showAllFeed ? 'Show less' : `Show all ${log.length}`}
+              </button>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -173,7 +195,10 @@ export function ScoringTab({
             {scorers.slice(0, 60).map((player) => {
               const delta = pointDeltas.get(player.id) ?? 0;
               return (
-                <div className={`feed${delta > 0 ? ' feed--scored' : ''}`} key={player.id}>
+                <div
+                  className={`feed${delta > 0 ? ' feed--scored' : ''}${delta < 0 ? ' feed--down' : ''}`}
+                  key={player.id}
+                >
                   <span className="feed__shot">
                     {player.headshot ? (
                       <img src={player.headshot} alt="" loading="lazy" />
@@ -195,7 +220,7 @@ export function ScoringTab({
                   <span className="feed__delta">
                     <span className="num" style={{ fontWeight: 800 }}>
                       {(player.normalizedPoints ?? 0).toFixed(1)}
-                      {delta > 0 ? <span className="delta-pop">+{delta.toFixed(1)}</span> : null}
+                      <DeltaBadge value={delta} />
                     </span>
                   </span>
                 </div>
@@ -207,6 +232,9 @@ export function ScoringTab({
     </div>
   );
 }
+
+/** How many feed rows show before the list is expanded. */
+const FEED_PREVIEW = 5;
 
 /** Who has this player, once rosters are public. */
 function OwnerTags({

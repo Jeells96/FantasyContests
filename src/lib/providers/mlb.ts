@@ -1,7 +1,14 @@
 import type { ContestTeam, GameState, StatMap } from '../../types';
 import { applyDerivedStats } from '../stats';
 import { getJson, mapLimitSettled, toNumber } from './http';
-import type { BuildPoolOptions, LiveGameStats, PoolPlayer, ProviderGame, SportProvider } from './types';
+import type {
+  BuildPoolOptions,
+  GameSituation,
+  LiveGameStats,
+  PoolPlayer,
+  ProviderGame,
+  SportProvider,
+} from './types';
 
 /**
  * MLB provider, backed by the public MLB Stats API.
@@ -341,6 +348,7 @@ export class MlbProvider implements SportProvider {
     let homeScore = 0;
     let awayScore = 0;
     let winnerTeamId: string | null = null;
+    let linescore: any = null;
 
     for (const day of schedule?.dates ?? []) {
       for (const scheduled of day?.games ?? []) {
@@ -349,6 +357,7 @@ export class MlbProvider implements SportProvider {
         statusDetail = String(scheduled?.status?.detailedState ?? statusDetail);
         homeScore = toNumber(scheduled?.teams?.home?.score);
         awayScore = toNumber(scheduled?.teams?.away?.score);
+        linescore = scheduled?.linescore ?? null;
         if (scheduled?.teams?.home?.isWinner === true) winnerTeamId = game.home.id;
         else if (scheduled?.teams?.away?.isWinner === true) winnerTeamId = game.away.id;
       }
@@ -378,6 +387,16 @@ export class MlbProvider implements SportProvider {
       }
     }
 
-    return { gameId: game.id, state, statusDetail, homeScore, awayScore, winnerTeamId, players };
+    const outs = toNumber(linescore?.outs);
+    const inning = toNumber(linescore?.currentInning);
+    const half = String(linescore?.inningState ?? '').trim();
+    const situation: GameSituation = {
+      awayScore,
+      homeScore,
+      clock: inning > 0 ? `${half || 'Inning'} ${inning}` : undefined,
+      detail: inning > 0 ? `${outs} out${outs === 1 ? '' : 's'}` : undefined,
+    };
+
+    return { gameId: game.id, state, statusDetail, homeScore, awayScore, winnerTeamId, players, situation };
   }
 }

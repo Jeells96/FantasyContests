@@ -1,6 +1,6 @@
 import type { ContestPlayer } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
-import { Initials } from './ui';
+import { DeltaBadge, Initials } from './ui';
 
 export interface PlayerCardProps {
   player: ContestPlayer;
@@ -48,6 +48,7 @@ export function PlayerCard({
   const classes = [
     'player',
     shownDelta > 0 ? 'player--scored' : '',
+    shownDelta < 0 ? 'player--dropped' : '',
     captain ? 'player--captain' : '',
     selected ? 'player--selected' : '',
     used && !selected ? 'player--used' : '',
@@ -103,7 +104,7 @@ export function PlayerCard({
           <>
             <span className="player__points">
               {points.toFixed(1)} pts
-              {shownDelta > 0 ? <span className="delta-pop">+{shownDelta.toFixed(1)}</span> : null}
+              <DeltaBadge value={shownDelta} />
             </span>
             {showRaw ? <span className="player__proj">raw {(player.rawPoints ?? 0).toFixed(1)}</span> : null}
           </>

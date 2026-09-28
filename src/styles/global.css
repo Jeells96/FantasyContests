@@ -1656,3 +1656,57 @@ h4 {
   height: 13px;
   font-size: 8.5px;
 }
+
+/* ------------------------------------------------- scoreboard stamp ------- */
+.delta-pop--down {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: var(--bad);
+}
+
+.player--dropped {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.rg-line--dropped {
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.rg-delta--down {
+  color: var(--bad);
+}
+
+.feed--compact {
+  padding: 6px 8px;
+  gap: 8px;
+}
+
+.feed--down {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.09), var(--bg-elev) 60%);
+}
+
+.board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.board__cell {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--line-soft);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.board__cell--score {
+  color: var(--text);
+  background: #0a0f1d;
+}

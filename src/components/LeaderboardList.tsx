@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Contest, LeaderboardRow } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
-import { Empty } from './ui';
+import { DeltaBadge, Empty } from './ui';
 import { RosterGrid } from './RosterGrid';
 
 /**
@@ -114,14 +114,13 @@ export function LeaderboardList({
                         <span className="num faint">{line.player ? formatMoney(line.salary) : ''}</span>
                         <span className="num" style={{ fontWeight: 800, minWidth: 54, textAlign: 'right' }}>
                           {line.normalizedPoints.toFixed(1)}
-                          {line.player && (pointDeltas?.get(line.player.id) ?? 0) > 0 ? (
-                            <span className="delta-pop">
-                              +
-                              {(
+                          {line.player ? (
+                            <DeltaBadge
+                              value={
                                 (pointDeltas?.get(line.player.id) ?? 0) *
                                 (line.isCaptain ? contest.captain?.multiplier ?? 1.5 : 1)
-                              ).toFixed(1)}
-                            </span>
+                              }
+                            />
                           ) : null}
                           {line.player && line.player.sport !== 'nfl' ? (
                             <div className="tiny faint">raw {line.rawPoints.toFixed(1)}</div>

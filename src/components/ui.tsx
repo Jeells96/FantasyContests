@@ -106,6 +106,29 @@ export function Banner({ tone, children }: { tone?: 'warn' | 'bad' | 'ok'; child
   return <div className={`banner${tone ? ` banner--${tone}` : ''}`}>{children}</div>;
 }
 
+/**
+ * Points a player just gained or lost. Green up, red down; nothing at all when
+ * the number is zero.
+ */
+export function DeltaBadge({ value, className }: { value: number; className?: string }) {
+  if (!value) return null;
+  const down = value < 0;
+  return (
+    <span className={`delta-pop${down ? ' delta-pop--down' : ''}${className ? ` ${className}` : ''}`}>
+      {value > 0 ? '+' : ''}
+      {value.toFixed(1)}
+    </span>
+  );
+}
+
+/** "Savannah Tester" -> "Savannah T." */
+export function shortPersonName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return name;
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
 export function Initials({ name }: { name: string }) {
   const initials = name
     .split(/\s+/)

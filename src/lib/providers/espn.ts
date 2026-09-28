@@ -1,7 +1,14 @@
 import type { GameState, Sport, StatMap } from '../../types';
 import { applyDerivedStats } from '../stats';
 import { getJson, mapLimit, mapLimitSettled, splitComposite, toNumber } from './http';
-import type { BuildPoolOptions, LiveGameStats, PoolPlayer, ProviderGame, SportProvider } from './types';
+import type {
+  BuildPoolOptions,
+  GameSituation,
+  LiveGameStats,
+  PoolPlayer,
+  ProviderGame,
+  SportProvider,
+} from './types';
 
 /**
  * ESPN provider, used for NFL and NBA.
@@ -536,7 +543,49 @@ export class EspnProvider implements SportProvider {
       awayScore,
       winnerTeamId,
       players,
+      situation: this.readSituation(summary, status, { homeScore, awayScore }),
     };
+  }
+
+  /** Down, distance and clock, taken from the most recent play. */
+  private readSituation(
+    summary: any,
+    status: any,
+    scores: { homeScore: number; awayScore: number },
+  ): GameSituation {
+    const period = Number(status?.period ?? 0);
+    const displayClock = String(status?.displayClock ?? '').trim();
+    const situation: GameSituation = {
+      awayScore: scores.awayScore,
+      homeScore: scores.homeScore,
+      clock: period > 0 ? `${ordinalPeriod(this.sport, period)}${displayClock ? ` ${displayClock}` : ''}` : undefined,
+    };
+
+    if (this.sport !== 'nfl') return situation;
+
+    const drives = summary?.drives ?? {};
+    const candidates: any[] = [
+      ...(drives?.current?.plays ?? []),
+      ...((drives?.previous ?? []).flatMap((drive: any) => drive?.plays ?? []) as any[]),
+    ];
+    const lastPlay = candidates[candidates.length > 0 ? candidates.length - 1 : 0];
+    const play = drives?.current?.plays?.length
+      ? drives.current.plays[drives.current.plays.length - 1]
+      : lastPlay;
+    if (!play) return situation;
+
+    const down = Number(play?.start?.down ?? 0);
+    const distance = Number(play?.start?.distance ?? 0);
+    if (down > 0) situation.detail = `${ordinal(down)} & ${distance}`;
+
+    const playPeriod = Number(play?.period?.number ?? period);
+    const playClock = String(play?.clock?.displayValue ?? displayClock).trim();
+    if (playPeriod > 0) {
+      situation.clock = `${ordinalPeriod(this.sport, playPeriod)}${playClock ? ` ${playClock}` : ''}`;
+    }
+    if (typeof play?.awayScore === 'number') situation.awayScore = play.awayScore;
+    if (typeof play?.homeScore === 'number') situation.homeScore = play.homeScore;
+    return situation;
   }
 
   /**
@@ -719,6 +768,20 @@ function activityScore(player: PoolPlayer): number {
     (s.ast ?? 0) * 1.5 +
     (s.fgMade ?? 0) * 3
   );
+}
+
+function ordinal(value: number): string {
+  if (value === 1) return '1st';
+  if (value === 2) return '2nd';
+  if (value === 3) return '3rd';
+  return `${value}th`;
+}
+
+/** NFL quarters read "3rd", NBA periods read "Q3"; overtime is OT either way. */
+function ordinalPeriod(sport: Sport, period: number): string {
+  const regulation = sport === 'nba' ? 4 : 4;
+  if (period > regulation) return period === regulation + 1 ? 'OT' : `${period - regulation}OT`;
+  return sport === 'nba' ? `Q${period}` : ordinal(period);
 }
 
 function first(values: number[] | undefined): number {

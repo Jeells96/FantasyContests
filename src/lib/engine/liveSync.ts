@@ -79,6 +79,13 @@ export function applyLiveResults(
   // that was, so that is the window a play is looked for in. A quiet minute
   // and a worker that has been down for an hour both get the right answer.
   const since = windowStart(contest.lastSyncAt);
+  /**
+   * A round that covers more than a few minutes is a catch-up, not a play.
+   * Whatever a player gained over twenty minutes did not happen on one snap,
+   * so no play is named for it: the change is real, where it came from is not
+   * something this round can honestly say.
+   */
+  const catchingUp = Date.now() - since > CATCHUP_MS;
   const events: ScoringLogEntry[] = [];
   for (const player of players) {
     const before = previousPoints.get(player.id) ?? 0;
@@ -91,7 +98,7 @@ export function applyLiveResults(
     // The play that moved this player, not wherever the game happens to be now:
     // one round of syncing usually spans several plays.
     const plays = playsByGame.get(player.gameId) ?? [];
-    const play = findPlay(player, playsSince(plays, since), game, delta);
+    const play = catchingUp ? undefined : findPlay(player, playsSince(plays, since), game, delta);
     // A change nothing in the feed explains is still this game's news, so it is
     // timed with the game rather than with the clock on the wall.
     const happenedAt = play?.wallclock ?? plays[plays.length - 1]?.wallclock ?? at;
@@ -159,7 +166,9 @@ export function findPlay(
   if (isTeamUnit(player)) {
     if (!game) return undefined;
     const opponentId = player.isHome ? game.away.id : game.home.id;
-    const theirs = plays.filter((play) => play.offenseTeamId === opponentId);
+    const theirs = plays.filter(
+      (play) => play.offenseTeamId === opponentId && !ADMIN_PLAY.test(play.text ?? ''),
+    );
     if (theirs.length === 0) return undefined;
     const consequential = theirs.filter(
       (play) => play.scoring || play.turnover || /sack|safety|blocked/i.test(play.text ?? ''),
@@ -182,6 +191,7 @@ export function findPlay(
   for (let index = plays.length - 1; index >= 0; index -= 1) {
     const play = plays[index];
     if (play.offenseTeamId !== undefined && play.offenseTeamId !== player.teamId) continue;
+    if (ADMIN_PLAY.test(play.text ?? '')) continue;
     if (play.text && squash(play.text).includes(key)) candidates.push(play);
   }
   if (candidates.length === 0) return undefined;
@@ -196,11 +206,16 @@ export function findPlay(
   return candidates[0];
 }
 
+/** Clock stoppages and quarter breaks: nothing happened, so nothing is credited to them. */
+const ADMIN_PLAY = /^\s*(end (quarter|of|game)|timeout|two-minute warning|end game)/i;
+
 /** Plays a name appears on that cannot have earned anybody points. */
 const BLANK_PLAY = /incomplete|no gain|kneels|spiked the ball|sacked|penalty|intercepted|fumble/i;
 
 /** Feeds lag the play itself, so the window reaches a little further back. */
 const FEED_LAG_MS = 120_000;
+/** Past this, a round is catching up on many plays rather than watching one. */
+const CATCHUP_MS = 6 * 60_000;
 /** However long the gap, a play this far back is not part of this update. */
 const WINDOW_CAP = 80;
 

@@ -116,6 +116,11 @@ async function syncContest(db: Firestore, contest: Contest): Promise<void> {
     status,
     entrantCount,
     scoringLog: mergeScoringLog(contest.scoringLog, events),
+    // Every writer has to move this on. It is what open pages check before
+    // running a round of their own, and it is the window each change is traced
+    // to a play within — left behind, every round starts looking like a
+    // catch-up and the feed stops naming plays at all.
+    lastSyncAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 

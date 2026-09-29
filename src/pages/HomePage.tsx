@@ -13,6 +13,7 @@ import {
 } from '../lib/db';
 import { hasSpread } from '../lib/engine/spread';
 import { deriveStatus, formatDateTime } from '../lib/engine/contestState';
+import { useLiveContestsSync } from '../hooks/useLiveSync';
 import { rosterSummary } from '../lib/engine/roster';
 import { enteredContests } from '../lib/identity';
 import { useSession } from '../state/SessionContext';
@@ -51,6 +52,10 @@ export function HomePage() {
     if (!personKey) return;
     return listenMyInvitations(personKey, uid, setInvitations);
   }, [personKey, uid]);
+
+  // The list is the other page people leave open, so it keeps live contests
+  // scoring rather than leaving that to whoever has a contest page up.
+  useLiveContestsSync(contests);
 
   // Re-render every second so the countdown to lock runs here too, not only on
   // the contest page.

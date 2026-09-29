@@ -14,6 +14,23 @@ const MIN_DELTA = 0.05;
  * snapshot after a page load is adopted silently, since opening mid-game should
  * not light up everyone who has scored all afternoon.
  */
+/**
+ * What moved between two snapshots of the pool, ignoring rounding noise and
+ * players who were not in the earlier one (they have no baseline to move from).
+ */
+export function pointChanges(
+  before: Map<string, number>,
+  next: Map<string, number>,
+): Map<string, number> {
+  const changes = new Map<string, number>();
+  for (const [id, points] of next.entries()) {
+    if (!before.has(id)) continue;
+    const delta = Math.round((points - (before.get(id) ?? 0)) * 100) / 100;
+    if (Math.abs(delta) >= MIN_DELTA) changes.set(id, delta);
+  }
+  return changes;
+}
+
 export function usePointDeltas(players: ContestPlayer[], enabled: boolean): Map<string, number> {
   const previous = useRef<Map<string, number> | null>(null);
   const [recorded, setRecorded] = useState<Map<string, number>>(new Map());
@@ -28,13 +45,7 @@ export function usePointDeltas(players: ContestPlayer[], enabled: boolean): Map<
     previous.current = next;
     if (!before || before.size === 0 || !enabled) return;
 
-    const changes = new Map<string, number>();
-    for (const [id, points] of next.entries()) {
-      // A player seen for the first time has no baseline to compare against.
-      if (!before.has(id)) continue;
-      const delta = Math.round((points - (before.get(id) ?? 0)) * 100) / 100;
-      if (Math.abs(delta) >= MIN_DELTA) changes.set(id, delta);
-    }
+    const changes = pointChanges(before, next);
     // Nothing moved: the last play's badges stay up until something does.
     if (changes.size === 0) return;
     setRecorded(changes);

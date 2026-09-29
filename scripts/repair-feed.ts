@@ -1,11 +1,17 @@
 /**
- * Re-trace scoring feed entries that were recorded without a play.
+ * Put a scoring feed straight.
  *
- * Entries written before changes were matched to plays — or during a round
- * that spanned more of the game than its search window — carry no down,
- * distance or clock. Each one still knows when it happened, so the play behind
- * it can be found after the fact: the newest play at or before that moment
- * that names the player and belongs to their team.
+ * Two things go wrong in a recorded feed. A round that ran after a long gap
+ * folds in everything that happened while nothing was watching, so one entry
+ * covers many plays — naming a play for that is false precision, and it is how
+ * a receiver came to be credited nineteen points for a thirteen-yard catch.
+ * Separately, entries recorded before changes were matched to plays carry no
+ * down or clock at all, and those can be traced after the fact.
+ *
+ * A round is recognised by the timestamp its entries share. One that produced a
+ * crowd of entries at once was catching up, so its entries lose any play they
+ * claim; a round that produced a handful was watching the game, so its untraced
+ * entries get the play they belong to.
  *
  *   npm run repair:feed -- --dry
  *   npm run repair:feed
@@ -19,6 +25,9 @@ import type { Contest, ContestPlayer, ScoringLogEntry } from '../src/types';
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
+
+/** A round that recorded this many changes at once was catching up, not watching. */
+const CATCH_UP_ENTRIES = 8;
 
 const config = {
   apiKey: process.env.FIREBASE_API_KEY ?? 'AIzaSyBQzn4hcka-PM4Ns7OO22p7OgvQ4iQ4do8',
@@ -37,8 +46,18 @@ async function main(): Promise<void> {
   for (const document of contests.docs) {
     const contest = { id: document.id, ...(document.data() as Omit<Contest, 'id'>) };
     const log = contest.scoringLog ?? [];
-    const bare = log.filter((entry) => !entry.playId);
-    if (bare.length === 0) continue;
+    if (log.length === 0) continue;
+
+    // Entries written by the same round share the timestamp in their id.
+    const roundOf = (entry: ScoringLogEntry): string => entry.id.split('-').slice(1).join('-');
+    const roundSize = new Map<string, number>();
+    for (const entry of log) roundSize.set(roundOf(entry), (roundSize.get(roundOf(entry)) ?? 0) + 1);
+    const wasCatchUp = (entry: ScoringLogEntry): boolean =>
+      (roundSize.get(roundOf(entry)) ?? 0) >= CATCH_UP_ENTRIES;
+
+    const bare = log.filter((entry) => !entry.playId && !wasCatchUp(entry));
+    const overclaimed = log.filter((entry) => entry.playId && wasCatchUp(entry));
+    if (bare.length === 0 && overclaimed.length === 0) continue;
 
     const pool = await loadPool(db, contest.id);
     const byId = new Map(pool.map((player) => [player.id, player]));
@@ -46,7 +65,15 @@ async function main(): Promise<void> {
     for (const game of contest.games) plays.set(game.id, await playsFor(game));
 
     let repaired = 0;
+    let stripped = 0;
     const next: ScoringLogEntry[] = log.map((entry) => {
+      if (wasCatchUp(entry)) {
+        if (!entry.playId) return entry;
+        // It covered many plays; it does not get to name one.
+        stripped += 1;
+        const { playId: _playId, situation: _situation, clock: _clock, ...rest } = entry;
+        return rest;
+      }
       if (entry.playId) return entry;
       const player = byId.get(entry.playerId);
       const game = contest.games.find((candidate) => candidate.id === player?.gameId);
@@ -74,8 +101,11 @@ async function main(): Promise<void> {
       };
     });
 
-    console.log(`${contest.name}: ${repaired} of ${bare.length} untraced entries re-traced${dry ? ' (dry run)' : ''}`);
-    if (!dry && repaired > 0) {
+    console.log(
+      `${contest.name}: ${repaired} of ${bare.length} traced, ${stripped} catch-up entries unclaimed` +
+        `${dry ? ' (dry run)' : ''}`,
+    );
+    if (!dry && repaired + stripped > 0) {
       await updateDoc(doc(db, 'contests', contest.id), {
         scoringLog: next.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)),
         updatedAt: new Date().toISOString(),

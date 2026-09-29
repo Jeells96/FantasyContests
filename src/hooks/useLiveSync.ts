@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getContest, getPool, patchContest, writeLivePool } from '../lib/db';
-import { deriveStatus } from '../lib/engine/contestState';
-import { applyLiveResults, mergeScoringLog } from '../lib/engine/liveSync';
-import { fetchLiveForGames } from '../lib/providers';
+import { runSyncRound, withDeadline } from '../lib/engine/syncRound';
 import type { Contest } from '../types';
 
 /** How often a tab considers syncing. */
 const TICK_MS = 20_000;
-/** A sync this recent means another tab already did the work. */
-const FRESH_MS = 25_000;
-
+/** A round that has not finished by now is abandoned, not waited on. */
+const ROUND_LIMIT_MS = 45_000;
 /** How long the refresh button spins before handing the tab back. */
 const ROUND_TIMEOUT_MS = 30_000;
 
@@ -27,10 +23,9 @@ export interface LiveSyncControls {
  * Keeps a live contest scoring without anyone having to run anything.
  *
  * While a contest is live, whichever tabs have it open take turns polling the
- * sports feeds and writing the results back, coordinating through the contest's
- * `lastSyncAt` so they do not all hammer the providers at once. Scoring
- * therefore runs whenever a single participant is watching, instead of
- * depending on the contest owner leaving a tab open or a worker running somewhere.
+ * sports feeds and writing the results back. Scoring therefore runs whenever a
+ * single participant is watching, instead of depending on the contest owner
+ * leaving a tab open or a worker running somewhere.
  *
  * `syncNow` runs a round straight away and ignores the coordination window, for
  * when somebody would rather not wait for the next tick. The result is written
@@ -42,43 +37,11 @@ export function useLiveSync(contest: Contest | null, enabled: boolean): LiveSync
   const [syncing, setSyncing] = useState(false);
   const contestId = contest?.id ?? null;
 
-  const round = useCallback(
-    async function round(force: boolean): Promise<void> {
-      if (!contestId) return;
-      try {
-        const fresh = await getContest(contestId);
-        if (!fresh || deriveStatus(fresh) !== 'live') return;
-
-        const last = Date.parse(fresh.lastSyncAt ?? '');
-        if (!force && Number.isFinite(last) && Date.now() - last < FRESH_MS) return;
-
-        // Claim this round before doing the slow part, so other tabs stand down.
-        await patchContest(contestId, { lastSyncAt: new Date().toISOString() });
-
-        const pool = await getPool(contestId);
-        if (pool.length === 0) return;
-        const live = await fetchLiveForGames(fresh.games);
-        if (live.length === 0) return;
-
-        const { games, players, status, events } = applyLiveResults(fresh, pool, live);
-        await writeLivePool(contestId, players);
-        await patchContest(contestId, {
-          games,
-          status,
-          scoringLog: mergeScoringLog(fresh.scoringLog, events),
-          lastSyncAt: new Date().toISOString(),
-        });
-      } catch {
-        // A failed round is not worth surfacing; the next tick retries.
-      }
-    },
-    [contestId],
-  );
-
   /**
    * One round at a time per tab. An automatic tick stands down while another is
    * running; a manual refresh queues behind it, because dropping the tap would
-   * leave the button looking broken.
+   * leave the button looking broken. Every round is time-boxed, so a request
+   * that never comes back cannot leave this tab standing down for ever.
    */
   const sync = useCallback(
     async function sync(force: boolean): Promise<void> {
@@ -87,20 +50,37 @@ export function useLiveSync(contest: Contest | null, enabled: boolean): LiveSync
         if (!force) return;
         await inFlight.current;
       }
-      const started = round(force).finally(() => {
+      const started = withDeadline(runSyncRound(contestId, force), ROUND_LIMIT_MS).finally(() => {
         if (inFlight.current === started) inFlight.current = null;
       });
       inFlight.current = started;
       await started;
     },
-    [contestId, round],
+    [contestId],
   );
 
   useEffect(() => {
     if (!enabled || !contestId) return;
     void sync(false);
     const timer = window.setInterval(() => void sync(false), TICK_MS);
-    return () => window.clearInterval(timer);
+
+    // A phone freezes this page the moment it sleeps or the app goes to the
+    // background, and the interval goes with it. Coming back is when the scores
+    // are most out of date, so catch up then rather than up to a tick later —
+    // and likewise when the connection returns.
+    const resume = () => {
+      if (document.visibilityState === 'visible') void sync(false);
+    };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('focus', resume);
+    window.addEventListener('online', resume);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('focus', resume);
+      window.removeEventListener('online', resume);
+    };
   }, [enabled, contestId, sync]);
 
   const syncNow = useCallback(() => {
@@ -117,4 +97,52 @@ export function useLiveSync(contest: Contest | null, enabled: boolean): LiveSync
   }, [sync]);
 
   return { syncNow, syncing };
+}
+
+/**
+ * Keeps every live contest on this page scoring.
+ *
+ * The contests list is the other page people leave open, so it drives scoring
+ * too. Rounds are claimed through the same `lastSyncAt`, so a contest being
+ * watched by somebody on its own page is simply skipped here.
+ */
+export function useLiveContestsSync(contests: Contest[] | null, enabled = true): void {
+  const running = useRef(false);
+  const ids = (contests ?? [])
+    .filter((contest) => contest.status === 'live')
+    .map((contest) => contest.id)
+    .join(',');
+
+  useEffect(() => {
+    if (!enabled || ids === '') return;
+    let cancelled = false;
+
+    async function tick(): Promise<void> {
+      if (cancelled || running.current) return;
+      running.current = true;
+      try {
+        for (const id of ids.split(',')) {
+          if (cancelled) break;
+          await withDeadline(runSyncRound(id), ROUND_LIMIT_MS);
+        }
+      } finally {
+        running.current = false;
+      }
+    }
+
+    void tick();
+    const timer = window.setInterval(() => void tick(), TICK_MS);
+    const resume = () => {
+      if (document.visibilityState === 'visible') void tick();
+    };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('online', resume);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('online', resume);
+    };
+  }, [ids, enabled]);
 }

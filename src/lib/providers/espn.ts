@@ -175,6 +175,11 @@ const CONFIGS: Partial<Record<Sport, EspnSportConfig>> = {
 };
 
 /** League-average NFL team defense production per game, used for D/ST baselines. */
+/** Letters only, so punctuation and spacing cannot break a name match. */
+function squashName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z]/g, '');
+}
+
 /** Ceiling on per-player game log requests when a pool needs them all. */
 const GAMELOG_POOL_LIMIT = 320;
 
@@ -759,7 +764,7 @@ export class EspnProvider implements SportProvider {
     if (byName.size === 0) return;
 
     const add = (shortName: string | undefined, key: string, amount = 1): void => {
-      const id = shortName ? byName.get(shortName.replace(/\s+/g, '').toLowerCase()) : undefined;
+      const id = shortName ? byName.get(squashName(shortName)) : undefined;
       if (!id) return;
       const stats = (players[id] ??= {});
       stats[key] = (stats[key] ?? 0) + amount;
@@ -800,9 +805,11 @@ export class EspnProvider implements SportProvider {
           const id = String(athlete?.id ?? '');
           const full = String(athlete?.displayName ?? '').trim();
           if (!id || full === '') continue;
-          const parts = full.split(/\s+/);
+          // A suffix is not part of the name the play text uses, so "Cam
+          // Little Jr." has to answer to "C.Little".
+          const parts = full.replace(/\s+(jr|sr|ii|iii|iv|v)\.?$/i, '').split(/\s+/);
           if (parts.length < 2) continue;
-          const key = `${parts[0][0]}.${parts.slice(1).join('')}`.replace(/\s+/g, '').toLowerCase();
+          const key = squashName(`${parts[0][0]}${parts.slice(1).join('')}`);
           // First writer wins, so a duplicate abbreviation never reassigns.
           if (!map.has(key)) map.set(key, id);
         }

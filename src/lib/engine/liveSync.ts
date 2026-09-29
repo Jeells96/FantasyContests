@@ -75,6 +75,10 @@ export function applyLiveResults(
   const playsByGame = new Map(live.map((result) => [result.gameId, result.plays ?? []]));
   const gamesById = new Map(games.map((game) => [game.id, game]));
   const at = new Date().toISOString();
+  // These changes came from the plays since the last round, however long ago
+  // that was, so that is the window a play is looked for in. A quiet minute
+  // and a worker that has been down for an hour both get the right answer.
+  const since = windowStart(contest.lastSyncAt);
   const events: ScoringLogEntry[] = [];
   for (const player of players) {
     const before = previousPoints.get(player.id) ?? 0;
@@ -87,7 +91,7 @@ export function applyLiveResults(
     // The play that moved this player, not wherever the game happens to be now:
     // one round of syncing usually spans several plays.
     const plays = playsByGame.get(player.gameId) ?? [];
-    const play = findPlay(player, plays, game);
+    const play = findPlay(player, playsSince(plays, since), game, delta);
     // A change nothing in the feed explains is still this game's news, so it is
     // timed with the game rather than with the clock on the wall.
     const happenedAt = play?.wallclock ?? plays[plays.length - 1]?.wallclock ?? at;
@@ -104,8 +108,12 @@ export function applyLiveResults(
       total: round2(after),
       statLine: player.statLine,
       playId: play ? `${player.gameId}-${play.id}` : undefined,
-      situation: play?.detail ?? situation?.detail,
-      clock: play?.clock ?? situation?.clock,
+      // Only a play this change was actually traced to gets to say where the
+      // game stood. Borrowing the game's current down and clock for a change
+      // nothing explains is how the feed came to describe the wrong team's
+      // possession; an unexplained change now simply says nothing.
+      situation: play?.detail,
+      clock: play?.clock,
       scoreLine: game
         ? `${game.away.abbreviation} ${awayScore} - ${homeScore} ${game.home.abbreviation}`
         : undefined,
@@ -140,10 +148,11 @@ function isTeamUnit(player: ContestPlayer): boolean {
  * opponent's last consequential play instead, since that is what its score
  * moves on.
  */
-function findPlay(
+export function findPlay(
   player: ContestPlayer,
   plays: GamePlay[],
   game: ContestGame | undefined,
+  delta: number,
 ): GamePlay | undefined {
   if (plays.length === 0) return undefined;
 
@@ -163,21 +172,74 @@ function findPlay(
     if (plays[index].athleteIds?.includes(player.id)) return plays[index];
   }
 
-  const patterns = namePatterns(player.name);
-  if (patterns.length === 0) return undefined;
+  // Football names nobody on the play, so the text is all there is. Only a
+  // play this player's own team ran counts: a receiver cannot catch a pass on
+  // the other team's possession, and crediting him there is how a scoring feed
+  // ends up claiming a team scored while it did not have the ball.
+  const key = abbreviatedName(player.name);
+  if (key === '') return undefined;
+  const candidates: GamePlay[] = [];
   for (let index = plays.length - 1; index >= 0; index -= 1) {
-    const text = plays[index].text;
-    if (text && patterns.some((pattern) => text.includes(pattern))) return plays[index];
+    const play = plays[index];
+    if (play.offenseTeamId !== undefined && play.offenseTeamId !== player.teamId) continue;
+    if (play.text && squash(play.text).includes(key)) candidates.push(play);
   }
-  return undefined;
+  if (candidates.length === 0) return undefined;
+  // Two plays can pass between rounds, and a name appears on plays that were
+  // worth nothing. Points came from a play that did something, so prefer one.
+  if (delta > 0) {
+    // Points cannot come from an incompletion. If the window holds nothing
+    // that could have earned them, say nothing rather than point at a play
+    // that plainly did not.
+    return candidates.find((play) => !BLANK_PLAY.test(play.text ?? ''));
+  }
+  return candidates[0];
 }
 
-/** "Kyren Williams" -> ["K.Williams", "Kyren Williams"], the forms feeds use. */
-function namePatterns(name: string): string[] {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return parts[0] ? [parts[0]] : [];
-  const last = parts[parts.length - 1];
-  return [`${parts[0][0]}.${last}`, name.trim()];
+/** Plays a name appears on that cannot have earned anybody points. */
+const BLANK_PLAY = /incomplete|no gain|kneels|spiked the ball|sacked|penalty|intercepted|fumble/i;
+
+/** Feeds lag the play itself, so the window reaches a little further back. */
+const FEED_LAG_MS = 120_000;
+/** However long the gap, a play this far back is not part of this update. */
+const WINDOW_CAP = 80;
+
+/** The moment this round's changes could have started happening. */
+function windowStart(lastSyncAt: string | null | undefined): number {
+  const last = Date.parse(lastSyncAt ?? '');
+  // Nothing to go on means everything so far is fair game: the first round of
+  // a contest carries the whole game in one go.
+  return Number.isFinite(last) ? last - FEED_LAG_MS : 0;
+}
+
+/** The plays that happened in this round's window, newest last. */
+export function playsSince(plays: GamePlay[], since: number): GamePlay[] {
+  const window = plays.filter((play) => {
+    const at = Date.parse(play.wallclock ?? '');
+    return Number.isFinite(at) ? at >= since : true;
+  });
+  return window.slice(-WINDOW_CAP);
+}
+
+/**
+ * A name in the form play-by-play writes it, reduced to letters.
+ *
+ * "Luther Burden III" and the feed's "L.Burden" both come out as "lburden", so
+ * a suffix cannot make a player invisible to his own plays — which it did, and
+ * those players then took whatever the game's current situation happened to be.
+ * Multi-word surnames survive too: "Amon-Ra St. Brown" matches "A.St. Brown".
+ */
+function abbreviatedName(name: string): string {
+  const withoutSuffix = name.trim().replace(/\s+(jr|sr|ii|iii|iv|v)\.?$/i, '');
+  const parts = withoutSuffix.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return squash(parts[0]);
+  return squash(parts[0][0] + parts.slice(1).join(''));
+}
+
+/** Letters only, lowercased, so punctuation and spacing cannot break a match. */
+function squash(value: string): string {
+  return value.toLowerCase().replace(/[^a-z]/g, '');
 }
 
 /** Newest first, oldest trimmed. */

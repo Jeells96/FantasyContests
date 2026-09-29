@@ -2027,12 +2027,20 @@ h4 {
 }
 
 /*
- * Baseball headshots are portraits with the face already centred, unlike the
- * wide ESPN crops, so the default top alignment cuts them off.
+ * Baseball headshots are tall portraits, not the wide crops every other league
+ * serves. Filling a round 44px frame with one blows it up to about 66px tall,
+ * and the head alone is taller than that — so `cover` always cuts the jaw off,
+ * whatever it is aligned to. Fit the whole photo instead and sit it on the
+ * bottom of the frame, which spends the leftover room above the cap rather than
+ * on the chin. The nudge in scale is what a fitted portrait gives back: enough
+ * to fill the circle, not enough to reach the top of a cap.
  */
 .player__shot[data-sport='mlb'] img,
 .feed__shot[data-sport='mlb'] img {
-  object-position: center 22%;
+  object-fit: contain;
+  object-position: center bottom;
+  transform: scale(1.06);
+  transform-origin: center bottom;
 }
 
 .table-mini thead th {
@@ -2180,4 +2188,32 @@ h4 {
 
 .pill__x:active {
   color: var(--bad);
+}
+
+/* Captain toggle on a player card, so one can be named while picking. */
+.cpt-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg-elev-2);
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cpt-toggle--on {
+  border-color: var(--warn);
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--warn);
+}
+
+.cpt-toggle:active {
+  transform: scale(0.92);
 }

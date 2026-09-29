@@ -259,6 +259,12 @@ export function ContestPage() {
     promoteToCaptain(slotId, player);
   }
 
+  /** Captain a player from wherever they are listed, not just the roster. */
+  function toggleCaptainForPlayer(playerId: string) {
+    const line = lineup.find((entry) => entry.playerId === playerId);
+    if (line) toggleCaptainSlot(line.slotId);
+  }
+
   function removeSlot(slotId: string) {
     setLineup((current) => current.filter((line) => line.slotId !== slotId));
   }
@@ -549,6 +555,11 @@ export function ContestPage() {
                       captainMultiplier={capMultiplier}
                       onClick={() => assignPlayer(player)}
                       onInfo={() => setDetail(player)}
+                      onToggleCaptain={
+                        hasCaptain && usedPlayerIds.has(player.id)
+                          ? () => toggleCaptainForPlayer(player.id)
+                          : undefined
+                      }
                     />
                   ))}
                   {visiblePlayers.length === 0 ? (

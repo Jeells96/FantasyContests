@@ -35,9 +35,15 @@ export function RosterPanel({
 }) {
   const bySlot = new Map(lineup.map((line) => [line.slotId, line.playerId]));
   const captainSlotId = lineup.find((line) => line.captain)?.slotId ?? null;
-  // The captain always leads the roster, wherever the roster is shown.
+  // Captain first, then most expensive to cheapest, with the spots still to
+  // fill at the bottom — the same order a roster reads in everywhere else.
+  const salaryOf = (slotId: string): number => {
+    const playerId = bySlot.get(slotId);
+    return playerId ? playersById.get(playerId)?.salary ?? 0 : -1;
+  };
   const ordered = [...slots].sort(
-    (a, b) => Number(b.id === captainSlotId) - Number(a.id === captainSlotId),
+    (a, b) =>
+      Number(b.id === captainSlotId) - Number(a.id === captainSlotId) || salaryOf(b.id) - salaryOf(a.id),
   );
 
   return (

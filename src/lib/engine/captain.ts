@@ -39,7 +39,15 @@ export function captainPremium(player: ContestPlayer, multiplier: number): numbe
   return effectiveSalary(player.salary, true, multiplier) - player.salary;
 }
 
-/** Captain first, then the remaining selections in roster order. */
-export function captainFirst<T extends { isCaptain: boolean }>(lines: T[]): T[] {
-  return [...lines].sort((a, b) => Number(b.isCaptain) - Number(a.isCaptain));
+/**
+ * Captain first, then the rest most expensive to cheapest.
+ *
+ * Price is the order a roster is read in — the big names at the top — so every
+ * place a lineup is shown uses this rather than the order the spots happen to
+ * be in. Empty spots sit at the end, since they cost nothing.
+ */
+export function captainFirst<T extends { isCaptain: boolean; salary?: number }>(lines: T[]): T[] {
+  return [...lines].sort(
+    (a, b) => Number(b.isCaptain) - Number(a.isCaptain) || (b.salary ?? 0) - (a.salary ?? 0),
+  );
 }

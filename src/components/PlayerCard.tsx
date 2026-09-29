@@ -17,6 +17,8 @@ export interface PlayerCardProps {
   pointsDelta?: number;
   onClick?: () => void;
   onInfo?: () => void;
+  /** Set when this player is on the roster and captains are in play. */
+  onToggleCaptain?: () => void;
 }
 
 /**
@@ -35,6 +37,7 @@ export function PlayerCard({
   pointsDelta,
   onClick,
   onInfo,
+  onToggleCaptain,
 }: PlayerCardProps) {
   const scoring = (player.normalizedPoints ?? 0) > 0;
   const salary = captain ? Math.round(player.salary * captainMultiplier) : player.salary;
@@ -120,11 +123,26 @@ export function PlayerCard({
         ) : (
           <span className="player__proj">proj {projection.toFixed(1)} pts</span>
         )}
-        {onInfo ? (
-          <button type="button" className="btn btn--sm btn--ghost" style={{ minHeight: 22, padding: '0 4px' }} onClick={onInfo}>
-            <span className="tiny faint">details</span>
-          </button>
-        ) : null}
+        <span className="row" style={{ gap: 4 }}>
+          {/* Captains are set here, on the player, rather than only down on the
+              roster — picking one should not mean scrolling past the pool. */}
+          {onToggleCaptain ? (
+            <button
+              type="button"
+              className={`cpt-toggle${captain ? ' cpt-toggle--on' : ''}`}
+              onClick={onToggleCaptain}
+              aria-pressed={captain}
+              aria-label={captain ? `Remove captain from ${player.name}` : `Make ${player.name} captain`}
+            >
+              C
+            </button>
+          ) : null}
+          {onInfo ? (
+            <button type="button" className="btn btn--sm btn--ghost" style={{ minHeight: 22, padding: '0 4px' }} onClick={onInfo}>
+              <span className="tiny faint">details</span>
+            </button>
+          ) : null}
+        </span>
       </div>
     </div>
   );

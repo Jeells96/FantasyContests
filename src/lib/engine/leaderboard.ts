@@ -8,6 +8,7 @@ import type {
 } from '../../types';
 import { validateLineup } from './lineup';
 import { captainEnabled, captainFirst, captainMultiplier, effectivePoints, effectiveSalary } from './captain';
+import { displayKey } from '../personKey';
 import { round2 } from './projections';
 import { gradePick } from './spread';
 
@@ -38,8 +39,14 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
   const multiplier = captainMultiplier(contest);
   const slotById = new Map(contest.rosterSlots.map((slot) => [slot.id, slot]));
 
-  const uids = new Set<string>([...standings.map((s) => s.uid), ...entriesByUid.keys()]);
   const nameByUid = new Map(standings.map((s) => [s.uid, s.displayName]));
+  const nameOf = (uid: string): string => entriesByUid.get(uid)?.displayName ?? nameByUid.get(uid) ?? '';
+  const uids = collapseByPerson(
+    [...new Set<string>([...standings.map((s) => s.uid), ...entriesByUid.keys()])],
+    nameOf,
+    entriesByUid,
+    selfUid,
+  );
 
   const rows: LeaderboardRow[] = [];
   for (const uid of uids) {
@@ -160,4 +167,45 @@ export function toResults(rows: LeaderboardRow[]): Contest['results'] {
     totalPicks: row.totalPicks,
     total: row.total,
   }));
+}
+
+/**
+ * One line per person, not per device.
+ *
+ * Devices are tied together the moment their owner opens the site again, but a
+ * phone left in a drawer never comes back, and the record it left behind would
+ * keep standing next to its owner on the leaderboard. A name is a person here,
+ * so where two records carry the same name only one of them is shown.
+ *
+ * The one kept is the one with something to show: their own row over a
+ * stranger's, then a submitted lineup over an empty place, then whichever was
+ * edited last — the same lineup a merge would have settled on.
+ */
+function collapseByPerson(
+  uids: string[],
+  nameOf: (uid: string) => string,
+  entries: Map<string, Entry>,
+  selfUid: string | null,
+): string[] {
+  const best = new Map<string, string>();
+  const order: string[] = [];
+  const rank = (uid: string): string => {
+    if (uid === selfUid) return '3';
+    const entry = entries.get(uid);
+    return entry ? `2${entry.updatedAt ?? ''}` : '1';
+  };
+
+  for (const uid of uids) {
+    // An entrant with no usable name cannot be matched to anyone, so they
+    // stand alone rather than being folded in with every other blank.
+    const key = displayKey(nameOf(uid)) || `uid:${uid}`;
+    const held = best.get(key);
+    if (held === undefined) {
+      best.set(key, uid);
+      order.push(key);
+    } else if (rank(uid) > rank(held)) {
+      best.set(key, uid);
+    }
+  }
+  return order.map((key) => best.get(key) as string);
 }

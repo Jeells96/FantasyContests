@@ -16,7 +16,8 @@
     "backfill:codes": "esbuild scripts/backfill-join-codes.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/backfill-join-codes.cjs --log-level=error && node scripts/.build/backfill-join-codes.cjs",
     "check:cfb": "esbuild scripts/cfb-check.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/cfb-check.cjs --log-level=error && node scripts/.build/cfb-check.cjs",
     "check:mlb": "esbuild scripts/mlb-check.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/mlb-check.cjs --log-level=error && node scripts/.build/mlb-check.cjs",
-    "repair:feed": "esbuild scripts/repair-feed.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/repair-feed.cjs --log-level=error && node scripts/.build/repair-feed.cjs"
+    "repair:feed": "esbuild scripts/repair-feed.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/repair-feed.cjs --log-level=error && node scripts/.build/repair-feed.cjs",
+    "check:people": "esbuild scripts/people-check.ts --bundle --platform=node --format=cjs --target=node20 --outfile=scripts/.build/people-check.cjs --log-level=error && node scripts/.build/people-check.cjs"
   },
   "dependencies": {
     "firebase": "^11.0.2",

@@ -1,4 +1,5 @@
 import {
+  arrayRemove,
   arrayUnion,
   collection,
   deleteDoc,
@@ -531,6 +532,68 @@ export async function getStandings(contestId: string, database: Firestore = db):
 export async function countEntrants(contestId: string): Promise<number> {
   const snapshot = await getCountFromServer(collection(db, CONTESTS, contestId, STANDINGS));
   return snapshot.data().count;
+}
+
+/* ------------------------------------------------------------- merging ---- */
+
+/**
+ * Hand everything one device owns over to the person who owns the device.
+ *
+ * Before names were tied together, each device was its own entrant, so a person
+ * who opened the site on a laptop as well as a phone built up two of
+ * everything: two places on a leaderboard, two lineups, and contests that only
+ * showed up on one of them. This folds the device's half into the person's, and
+ * runs once per device — afterwards the device plays as the person and there is
+ * nothing left to fold.
+ *
+ * Where both halves entered the same contest, the lineup edited most recently
+ * is the one kept: it is the one they last meant.
+ */
+export async function absorbDevice(personUid: string, deviceUid: string): Promise<void> {
+  if (!personUid || !deviceUid || personUid === deviceUid) return;
+  const contests = await listMyContestsOnce(deviceUid);
+
+  for (const contest of contests) {
+    const batch = writeBatch(db);
+    const entryRef = doc(db, CONTESTS, contest.id, ENTRIES, deviceUid);
+    const standingRef = doc(db, CONTESTS, contest.id, STANDINGS, deviceUid);
+    const [deviceEntry, deviceStanding] = await Promise.all([getDoc(entryRef), getDoc(standingRef)]);
+
+    if (deviceEntry.exists()) {
+      const entry = deviceEntry.data() as Entry;
+      const mineRef = doc(db, CONTESTS, contest.id, ENTRIES, personUid);
+      const mine = await getDoc(mineRef);
+      const kept = mine.exists() ? (mine.data() as Entry) : null;
+      if (!kept || (kept.updatedAt ?? '') < (entry.updatedAt ?? '')) {
+        batch.set(mineRef, { ...entry, uid: personUid });
+        batch.set(doc(db, CONTESTS, contest.id, STANDINGS, personUid), {
+          uid: personUid,
+          displayName: entry.displayName,
+          ...(entry.teamName ? { teamName: entry.teamName } : {}),
+          // Keep the earlier of the two: they entered when they first entered.
+          enteredAt:
+            kept && (kept.submittedAt ?? "") < (entry.submittedAt ?? "")
+              ? kept.submittedAt
+              : entry.submittedAt,
+          submitted: true,
+        } satisfies Standing);
+      }
+      batch.delete(entryRef);
+    }
+
+    // The old public record goes either way, or the leaderboard keeps showing
+    // this person twice — once with a lineup, once without.
+    if (deviceStanding.exists()) batch.delete(standingRef);
+
+    batch.update(doc(db, CONTESTS, contest.id), {
+      members: arrayUnion(personUid),
+      ...(contest.ownerId === deviceUid ? { ownerId: personUid } : {}),
+    });
+    await batch.commit();
+    // Dropping the old membership last means a failure above leaves the contest
+    // reachable from this device rather than stranded between two owners.
+    await updateDoc(doc(db, CONTESTS, contest.id), { members: arrayRemove(deviceUid) });
+  }
 }
 
 export { serverTimestamp };

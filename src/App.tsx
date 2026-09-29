@@ -8,7 +8,7 @@ import { HomePage } from './pages/HomePage';
 import { useSession } from './state/SessionContext';
 
 export function App() {
-  const { identity, saveName, isAdmin } = useSession();
+  const { identity, saveName, isAdmin, ready } = useSession();
   const location = useLocation();
   const inAdmin = location.pathname.startsWith('/admin');
 
@@ -30,6 +30,14 @@ export function App() {
         </Link>
       </header>
 
+      {/* Who is playing decides what every page below reads and writes, so the
+          app waits on it rather than loading one person's contests and then
+          another's. The admin area belongs to nobody in particular. */}
+      {!ready && !inAdmin ? (
+        <div className="page">
+          <div className="empty">Loading…</div>
+        </div>
+      ) : (
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/new" element={<ContestBuilderPage />} />
@@ -52,6 +60,7 @@ export function App() {
           }
         />
       </Routes>
+      )}
 
       {/* Name is required to play, but the settings area does not need one. */}
       {!identity && !inAdmin ? <NameGate onSave={saveName} /> : null}

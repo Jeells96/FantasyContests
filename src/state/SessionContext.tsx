@@ -1,12 +1,34 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ADMIN_PIN } from '../lib/firebase';
-import { clearIdentity, deviceId, loadIdentity, saveIdentity, type Identity } from '../lib/identity';
+import {
+  clearIdentity,
+  deviceId,
+  loadIdentity,
+  markMerged,
+  mergedInto,
+  saveIdentity,
+  type Identity,
+} from '../lib/identity';
+import { absorbDevice } from '../lib/db';
 import { personKey, rememberPerson } from '../lib/people';
 
 const ADMIN_SESSION_KEY = 'fantasycontests.admin.v1';
 
+/**
+ * How long to wait for the directory before playing on this device alone.
+ *
+ * Reaching Firestore is what ties a name across devices, but it is not what
+ * makes the site usable — a phone on a bad connection should still get a
+ * lineup in. It falls back to the device's own id and ties up on the next load.
+ */
+const RESOLVE_MS = 6_000;
+
 interface SessionValue {
-  /** Random per-device id; owns this device's entries. */
+  /**
+   * Who is playing. Shared by every device this person uses, so a name is one
+   * entrant rather than one per device; their own device id until a name is
+   * entered and the directory answers.
+   */
   uid: string;
   identity: Identity | null;
   /** This person's name reduced to a match key; empty without a name. */
@@ -39,20 +61,76 @@ function readAdminSession(): boolean {
  * sign in to, so the app is usable the moment Firestore is reachable.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [uid] = useState<string>(() => deviceId());
+  const [device] = useState<string>(() => deviceId());
+  const [personUid, setPersonUid] = useState<string | null>(null);
+  const [ready, setReady] = useState<boolean>(() => loadIdentity() === null);
   const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity());
   const [isAdmin, setIsAdmin] = useState<boolean>(() => readAdminSession());
+  const uid = personUid ?? device;
 
   const saveName = useCallback((firstName: string, lastName: string) => {
     setIdentity(saveIdentity(firstName, lastName));
   }, []);
 
-  // Being known by name is what lets someone be invited to a contest before
-  // they have ever opened the site, and what fills the admin's pool lists.
+  /*
+   * Settle who this is before anything reads or writes on their behalf.
+   *
+   * Being known by name is what lets someone be invited to a contest before
+   * they have ever opened the site, and what fills the admin's pool lists. It
+   * is also what makes a name one person: the directory answers with the id
+   * their name already plays under, and this device takes it up, handing over
+   * anything it had built up on its own first.
+   *
+   * Everything downstream keys off this id, so it is settled before the app is
+   * shown — writing an entry under the device's id and moving it a moment later
+   * is how a lineup goes missing.
+   */
   useEffect(() => {
-    if (!identity) return;
-    void rememberPerson(identity.firstName, identity.lastName, uid);
-  }, [identity, uid]);
+    if (!identity) {
+      setPersonUid(null);
+      setReady(true);
+      return;
+    }
+    let cancelled = false;
+    setReady(false);
+
+    const resolve = async () => {
+      const { uid: resolved, deviceIds } = await rememberPerson(
+        identity.firstName,
+        identity.lastName,
+        device,
+      );
+      if (cancelled) return;
+      // Every device this name has ever been typed on, not just this one: a
+      // phone that is never opened again would otherwise keep its contests,
+      // its lineups and its place on the leaderboard to itself forever.
+      const others = deviceIds.filter((id) => id !== resolved);
+      const done = `${resolved}|${others.join(',')}`;
+      if (others.length > 0 && mergedInto() !== done) {
+        for (const other of others) {
+          await absorbDevice(resolved, other).catch(() => undefined);
+          if (cancelled) return;
+        }
+        markMerged(done);
+      }
+      if (!cancelled) setPersonUid(resolved);
+    };
+
+    const settled = resolve().catch(() => undefined);
+    // A hung write must not hold the whole app closed.
+    const timer = setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, RESOLVE_MS);
+    void settled.finally(() => {
+      clearTimeout(timer);
+      if (!cancelled) setReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [identity, device]);
 
   const forgetName = useCallback(() => {
     clearIdentity();
@@ -84,7 +162,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       uid,
       identity,
       personKey: identity ? personKey(identity.firstName, identity.lastName) : '',
-      ready: true,
+      ready,
       error: null,
       saveName,
       forgetName,
@@ -92,7 +170,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       unlockAdmin,
       lockAdmin,
     }),
-    [uid, identity, saveName, forgetName, isAdmin, unlockAdmin, lockAdmin],
+    [uid, identity, ready, saveName, forgetName, isAdmin, unlockAdmin, lockAdmin],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

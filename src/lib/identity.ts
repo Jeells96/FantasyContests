@@ -99,6 +99,33 @@ export function teamNameFor(identity: Identity | null): string {
   return first.endsWith('S') ? `${first}' TEAM` : `${first}'S TEAM`;
 }
 
+const MERGED_KEY = 'fantasycontests.merged.v1';
+
+/**
+ * The merge this device has already carried out, as the person it gathered
+ * everything under and the devices it gathered in.
+ *
+ * Gathering a person's devices together only has to happen once, but it has to
+ * happen again when there is something new to gather: a name changed, or a
+ * device that did not exist last time. Recording both halves is what tells
+ * those apart from a merge already done.
+ */
+export function mergedInto(): string | null {
+  try {
+    return localStorage.getItem(MERGED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function markMerged(personUid: string): void {
+  try {
+    localStorage.setItem(MERGED_KEY, personUid);
+  } catch {
+    // Storage blocked: the merge is idempotent, so it simply runs again.
+  }
+}
+
 const ENTERED_KEY = 'fantasycontests.entered.v1';
 
 /** Remember which contests this device entered, for the main page badge. */

@@ -9,8 +9,19 @@
  * Both live under `config/` as single documents, so the open security rules
  * already cover them and nothing has to be redeployed.
  */
-import { arrayUnion, deleteField, doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore';
+import {
+  deleteField,
+  doc,
+  getDoc,
+  onSnapshot,
+  runTransaction,
+  setDoc,
+  type Unsubscribe,
+} from 'firebase/firestore';
 import { db } from './firebase';
+import { personKey } from './personKey';
+
+export { personKey };
 
 const CONFIG = 'config';
 const PEOPLE_DOC = 'people';
@@ -26,6 +37,14 @@ export interface Person {
   firstName: string;
   lastName: string;
   displayName: string;
+  /**
+   * The id this person's contests and entries are stored under, shared by every
+   * device they play on. It is deliberately not derived from their name: an
+   * entry is readable by anyone who knows its id, so the id has to stay
+   * unguessable. The first device to carry the name lends its own random id,
+   * which is why merging costs that device nothing.
+   */
+  uid: string;
   /** Pool ids. Empty means they cannot invite and are not an invite option. */
   pools: string[];
   /** Devices that have carried this name. */
@@ -33,21 +52,6 @@ export interface Person {
   seenAt?: string;
 }
 
-/**
- * A name reduced to something that matches across devices: case, spacing and
- * punctuation are ignored, so "J.T. O'Neill" and "jt oneill" are one person.
- * Firestore field paths use dots, so the key never contains one.
- */
-export function personKey(firstName: string, lastName: string): string {
-  const clean = (value: string) =>
-    value
-      .normalize('NFKD')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  const first = clean(firstName);
-  const last = clean(lastName);
-  return first && last ? `${first}-${last}` : '';
-}
 
 function peopleFromDoc(data: Record<string, unknown> | undefined): Record<string, Person> {
   const raw = (data?.people ?? {}) as Record<string, Partial<Person>>;
@@ -59,6 +63,7 @@ function peopleFromDoc(data: Record<string, unknown> | undefined): Record<string
       firstName: String(value.firstName ?? ''),
       lastName: String(value.lastName ?? ''),
       displayName: String(value.displayName ?? `${value.firstName ?? ''} ${value.lastName ?? ''}`).trim(),
+      uid: String(value.uid ?? (Array.isArray(value.deviceIds) ? value.deviceIds[0] ?? '' : '')),
       pools: Array.isArray(value.pools) ? value.pools.map(String) : [],
       deviceIds: Array.isArray(value.deviceIds) ? value.deviceIds.map(String) : [],
       seenAt: typeof value.seenAt === 'string' ? value.seenAt : undefined,
@@ -88,35 +93,65 @@ export async function loadPeople(): Promise<Record<string, Person>> {
 }
 
 /**
- * Record that this device is using this name. Never touches their pools, which
- * are the admin's to set, and merges per field so two devices signing in at
- * once cannot overwrite each other.
+ * Record that this device is using this name, and answer with the id that name
+ * plays under.
+ *
+ * A name is a person, and a person is one entrant however many devices they
+ * open the site on — a phone and a laptop should not be two names on a
+ * leaderboard. The directory is what makes that true: the first device to
+ * claim a name lends the person its own random id, and every later device is
+ * told the same one. Nothing here is derived from the name itself, so an entry
+ * stays as hard to find as it was.
+ *
+ * It runs as a transaction because the id must be minted exactly once: two
+ * devices opened together would otherwise each mint their own and split the
+ * person in half. Pools are still never touched — those are the admin's.
+ *
+ * It answers with every device on record as well, so whichever one is in hand
+ * can gather up what the others left behind — a phone that is never opened
+ * again would otherwise keep its half forever.
  */
 export async function rememberPerson(
   firstName: string,
   lastName: string,
   deviceId: string,
-): Promise<void> {
+): Promise<{ uid: string; deviceIds: string[] }> {
   const key = personKey(firstName, lastName);
-  if (!key) return;
+  if (!key) return { uid: deviceId, deviceIds: [deviceId] };
   try {
-    await setDoc(
-      doc(db, CONFIG, PEOPLE_DOC),
-      {
-        people: {
-          [key]: {
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            displayName: `${firstName.trim()} ${lastName.trim()}`,
-            deviceIds: arrayUnion(deviceId),
-            seenAt: new Date().toISOString(),
+    return await runTransaction(db, async (tx) => {
+      const ref = doc(db, CONFIG, PEOPLE_DOC);
+      const snapshot = await tx.get(ref);
+      const people = ((snapshot.data()?.people ?? {}) as Record<string, Partial<Person>>) ?? {};
+      const existing = people[key];
+      const knownDevices = (Array.isArray(existing?.deviceIds) ? existing.deviceIds : []).map(String);
+      // Adopt whatever this name already plays under. Falling back to the
+      // earliest device on record is what carries contests created before
+      // people had ids at all: that device keeps everything it owns.
+      const uid = String(existing?.uid || knownDevices[0] || deviceId);
+      const deviceIds = knownDevices.includes(deviceId) ? knownDevices : [...knownDevices, deviceId];
+      tx.set(
+        ref,
+        {
+          people: {
+            [key]: {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              displayName: `${firstName.trim()} ${lastName.trim()}`,
+              uid,
+              deviceIds,
+              seenAt: new Date().toISOString(),
+            },
           },
         },
-      },
-      { merge: true },
-    );
+        { merge: true },
+      );
+      return { uid, deviceIds };
+    });
   } catch {
-    // Knowing who has used the site is a convenience, never a blocker.
+    // Directory unreachable: play on this device's own id rather than not at
+    // all. The merge happens the next time it can be reached.
+    return { uid: deviceId, deviceIds: [deviceId] };
   }
 }
 

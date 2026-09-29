@@ -88,6 +88,10 @@ export function PlayerCard({
             {captain ? <span className="cpt-badge">CPT</span> : null}
             {player.name}
             {player.injuryStatus ? <span className="pill pill--warn">{player.injuryStatus}</span> : null}
+            {/* Says why somebody good is cheap tonight. */}
+            {player.availabilityNote ? (
+              <span className="pill pill--warn">{player.availabilityNote}</span>
+            ) : null}
           </span>
           <span className="player__meta">
             <span className="pos-tag">{player.position}</span>

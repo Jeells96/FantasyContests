@@ -331,6 +331,7 @@ export class EspnProvider implements SportProvider {
           gamesPlayed: entry.gamesPlayed,
           contextMultiplier: multiplier,
           impliedPointsAgainst: impliedAgainst,
+          ...availabilityForStatus(injuryLabel(athlete)),
         });
       }
 
@@ -969,6 +970,23 @@ function isUnavailable(athlete: any): boolean {
   if (statusType && statusType !== 'active') return true;
   const injuries: any[] = athlete?.injuries ?? [];
   return injuries.some((injury) => /out|injured-reserve|suspension/i.test(String(injury?.status ?? '')));
+}
+
+/**
+ * What an injury designation means for tonight.
+ *
+ * Out and suspended players do not play, so they are priced as what they are
+ * rather than as the player they are when healthy. Questionable is left alone:
+ * most of them play.
+ */
+function availabilityForStatus(status: string | undefined): { availability?: number; availabilityNote?: string } {
+  if (!status) return {};
+  const value = status.toUpperCase();
+  if (/^(O|OUT|IR|INJURED RESERVE|SUSPENDED|SUSP|PUP|NFI|DNP)/.test(value)) {
+    return { availability: 0.04, availabilityNote: 'Ruled out' };
+  }
+  if (/^(D|DOUBTFUL)/.test(value)) return { availability: 0.25, availabilityNote: 'Doubtful' };
+  return {};
 }
 
 function injuryLabel(athlete: any): string | undefined {

@@ -116,6 +116,15 @@ export function priceContest(
   // 3. Trim unrosterable depth so it does not distort the salary distribution.
   const trimmed = trimPool(candidates, slots, rawProjections);
 
+  // 3b. Scale by how likely each player is to play at all. This runs after the
+  // baselines and the trim, so a bench player is still measured against what he
+  // would do if he played — and then priced for the chance that he does.
+  for (const player of trimmed) {
+    const availability = player.availability ?? 1;
+    if (availability >= 1) continue;
+    rawProjections.set(player.id, round2((rawProjections.get(player.id) ?? 0) * availability));
+  }
+
   // 4. Value over replacement, per position, using this contest's roster demand.
   const priced = computeValueOverReplacement(trimmed, slots, rawProjections, normalization);
 
@@ -141,6 +150,8 @@ export function priceContest(
       injuryStatus: p.injuryStatus,
       isTeamUnit: p.isTeamUnit,
       contextMultiplier: p.contextMultiplier,
+      availability: p.availability,
+      availabilityNote: p.availabilityNote,
       salary: salaries.get(p.id) ?? SALARY_MIN,
       projection: {
         raw: round2(entry.rawProjection),

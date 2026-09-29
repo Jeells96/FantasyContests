@@ -40,6 +40,9 @@ export function PlayerSheet({
         </span>
         {player.jersey ? <span className="pill">#{player.jersey}</span> : null}
         {player.injuryStatus ? <span className="pill pill--warn">{player.injuryStatus}</span> : null}
+        {player.availabilityNote ? (
+          <span className="pill pill--warn">{player.availabilityNote}</span>
+        ) : null}
       </div>
 
       {/* How the points on the leaderboard were actually earned. */}
@@ -94,6 +97,14 @@ export function PlayerSheet({
       <div className="card card--tight">
         <KeyValue label="Salary" value={formatMoney(player.salary)} />
         <KeyValue label="Projected for this game" value={`${player.projection.normalized.toFixed(1)} pts`} />
+        {player.availability !== undefined && player.availability < 1 ? (
+          <KeyValue
+            label="Chance of playing"
+            value={`${Math.round(player.availability * 100)}%${
+              player.availabilityNote ? ` · ${player.availabilityNote}` : ''
+            }`}
+          />
+        ) : null}
         {player.sport !== 'nfl' ? (
           <KeyValue
           label={`Projected (${SPORT_LABELS[player.sport]} points)`}

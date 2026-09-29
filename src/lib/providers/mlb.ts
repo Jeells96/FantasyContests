@@ -54,6 +54,18 @@ const PITCHING_MAP: Record<string, string> = {
   shutouts: 'pitchSHO',
 };
 
+/** What the feed says about who is playing tonight. */
+interface GameCard {
+  probable: { home?: string; away?: string };
+  /** Batting order ids, empty until the lineup is posted. */
+  lineup: { home: Set<string>; away: Set<string> };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
 const ELIGIBILITY: Record<string, string[]> = {
   P: ['P'],
   SP: ['P', 'SP'],
@@ -156,7 +168,7 @@ export class MlbProvider implements SportProvider {
 
   private fetchSchedule(date: string, cacheMs: number): Promise<any> {
     return getJson<any>(
-      `${API}/schedule?sportId=1&date=${date}&hydrate=team,probablePitcher,linescore`,
+      `${API}/schedule?sportId=1&date=${date}&hydrate=team,probablePitcher,lineups,linescore`,
       { cacheMs },
     );
   }
@@ -204,9 +216,9 @@ export class MlbProvider implements SportProvider {
     const progress = options.onProgress ?? (() => {});
     const season = new Date(relevant[0].startTime).getUTCFullYear();
 
-    // Probable starting pitchers, so the pool contains startable pitchers only.
-    progress('Loading MLB probable pitchers…');
-    const probables = await this.loadProbables(relevant);
+    // Who is announced to play: probable starters, and the batting order if posted.
+    progress('Loading MLB probable pitchers and lineups…');
+    const cards = await this.loadGameCards(relevant);
 
     progress('Loading MLB rosters and season splits…');
     const jobs = relevant.flatMap((game) => [
@@ -234,26 +246,65 @@ export class MlbProvider implements SportProvider {
     jobs.forEach((job, index) => {
       const roster = rosters[index];
       if (!roster) return;
+      const side = job.isHome ? 'home' : 'away';
+      const card = cards.get(job.game.id);
+      const probable = card?.probable?.[side];
+      const lineup = card?.lineup?.[side];
+      const lineupPosted = (lineup?.size ?? 0) >= 8;
+
+      // How many games the club has played, taken from whoever has played the
+      // most of them. It turns a player's games into how often they start.
+      const teamGames = Math.max(
+        1,
+        ...(roster.roster ?? []).map((entry: any) =>
+          toNumber(collectSplits(entry?.person ?? {}).hittingSeason?.gamesPlayed),
+        ),
+      );
+
       for (const entry of roster.roster ?? []) {
         const person = entry?.person ?? {};
         const id = String(person.id ?? '');
         if (!id) continue;
         const rosterPosition = String(entry?.position?.abbreviation ?? '');
         const splits = collectSplits(person);
-        const isPitcher = rosterPosition === 'P' || rosterPosition === 'TWP';
+        const isProbable = probable === id;
+        // A two-way player only counts as a pitcher on the night he pitches.
+        const isPitcher = rosterPosition === 'P' || (rosterPosition === 'TWP' && isProbable);
+
+        let position = isPitcher ? 'SP' : rosterPosition === 'TWP' ? 'DH' : rosterPosition;
+        let availability = 1;
+        let availabilityNote: string | undefined;
 
         if (isPitcher) {
-          const probable = probables.get(job.game.id)?.[job.isHome ? 'home' : 'away'];
           const starts = toNumber(splits.pitchingSeason?.gamesStarted);
           const appearances = toNumber(splits.pitchingSeason?.gamesPlayed);
-          const isProbable = probable === id;
           const looksLikeStarter = appearances > 0 && starts / appearances >= 0.5 && starts >= 3;
-          // If the probable starter is known, only that pitcher is rosterable.
-          if (probable ? !isProbable : !looksLikeStarter) continue;
+          if (isProbable) {
+            availability = 1;
+          } else if (looksLikeStarter) {
+            // A starter on his rest day. He is on the roster and will almost
+            // certainly not throw a pitch, so he is priced as a long shot.
+            availability = probable ? 0.04 : 0.25;
+            availabilityNote = probable ? 'Not starting tonight' : 'Starter not announced';
+          } else {
+            // The bullpen: he may well pitch, but only for an inning, and only
+            // if the game asks for it.
+            position = 'RP';
+            availability = clamp(appearances / teamGames, 0.15, 0.7);
+            availabilityNote = 'Bullpen';
+          }
+        } else if (lineupPosted) {
+          const starting = lineup?.has(id) ?? false;
+          availability = starting ? 1 : 0.1;
+          availabilityNote = starting ? undefined : 'Not in tonight’s lineup';
+        } else {
+          // No lineup yet, so how regularly they play is the best guide there is.
+          const games = toNumber(splits.hittingSeason?.gamesPlayed);
+          availability = clamp(games / teamGames, 0.15, 1);
+          if (availability < 0.6) availabilityNote = 'Part-time starter';
         }
 
-        const positions = ELIGIBILITY[rosterPosition] ?? [rosterPosition];
-        const position = isPitcher ? 'P' : rosterPosition;
+        const positions = ELIGIBILITY[position] ?? ELIGIBILITY[rosterPosition] ?? [rosterPosition];
 
         const seasonStat = isPitcher ? splits.pitchingSeason : splits.hittingSeason;
         const recentStat = isPitcher ? splits.pitchingRecent : splits.hittingRecent;
@@ -293,6 +344,8 @@ export class MlbProvider implements SportProvider {
                 : undefined,
             recentGames: recentGames > 0 ? recentGames : undefined,
             contextMultiplier: 1,
+            availability,
+            availabilityNote,
           },
         });
       }
@@ -317,21 +370,26 @@ export class MlbProvider implements SportProvider {
     return drafts.map((d) => d.player);
   }
 
-  private async loadProbables(games: ProviderGame[]): Promise<Map<string, { home?: string; away?: string }>> {
-    const byDate = new Map<string, ProviderGame[]>();
-    for (const game of games) {
-      const date = game.startTime.slice(0, 10);
-      (byDate.get(date) ?? byDate.set(date, []).get(date)!).push(game);
-    }
-    const result = new Map<string, { home?: string; away?: string }>();
-    for (const date of byDate.keys()) {
+  /**
+   * Who is announced to play tonight: the probable starting pitchers, and the
+   * batting order once it is posted (a couple of hours before first pitch).
+   */
+  private async loadGameCards(games: ProviderGame[]): Promise<Map<string, GameCard>> {
+    const dates = new Set(games.map((game) => game.startTime.slice(0, 10)));
+    const result = new Map<string, GameCard>();
+    for (const date of dates) {
       const data = await this.fetchSchedule(date, 5 * 60_000).catch(() => null);
       for (const day of data?.dates ?? []) {
         for (const game of day?.games ?? []) {
           const id = String(game?.gamePk ?? '');
+          const ids = (players: any): Set<string> =>
+            new Set((Array.isArray(players) ? players : []).map((p: any) => String(p?.id ?? '')).filter(Boolean));
           const home = game?.teams?.home?.probablePitcher?.id;
           const away = game?.teams?.away?.probablePitcher?.id;
-          result.set(id, { home: home ? String(home) : undefined, away: away ? String(away) : undefined });
+          result.set(id, {
+            probable: { home: home ? String(home) : undefined, away: away ? String(away) : undefined },
+            lineup: { home: ids(game?.lineups?.homePlayers), away: ids(game?.lineups?.awayPlayers) },
+          });
         }
       }
     }

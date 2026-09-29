@@ -125,6 +125,13 @@ export interface ContestPlayer {
   headshot?: string;
   jersey?: string;
   injuryStatus?: string;
+  /**
+   * How likely they were to play when the contest was priced, 0 to 1. Below 1
+   * their projection and salary were cut to match.
+   */
+  availability?: number;
+  /** Shown on the card when they are not expected to start. */
+  availabilityNote?: string;
   /** Auto-generated salary. */
   salary: number;
   projection: PlayerProjection;

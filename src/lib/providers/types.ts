@@ -32,6 +32,15 @@ export interface PoolPlayer {
   contextMultiplier?: number;
   /** Implied points the opposing offense is expected to score. */
   impliedPointsAgainst?: number;
+  /**
+   * How likely this player is to actually play tonight, 0 to 1. A posted
+   * lineup makes this certain; otherwise it is how often they play. Projections
+   * and therefore salaries are scaled by it, so somebody who is not starting is
+   * priced as what they are: a long shot.
+   */
+  availability?: number;
+  /** Why, in the words shown on their card: "Not in tonight's lineup". */
+  availabilityNote?: string;
 }
 
 /** Where the game stood when these stats were read. */

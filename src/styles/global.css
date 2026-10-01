@@ -2242,3 +2242,67 @@ h4 {
 .done-row__result { flex: none; display: grid; justify-items: end; gap: 1px; }
 .done-row__winner { font-size: 12.5px; font-weight: 800; color: var(--text-muted); }
 .done-row__winner--me { color: var(--good); }
+
+/* ---------------------------------------------------------- score phase ----
+ * A contest runs games hours apart, so three different kinds of number share
+ * the screen: what a player is expected to do, what they have done so far, and
+ * what they finished with. They used to look identical, which made a player yet
+ * to take the field read as one who played and scored nothing. Projections are
+ * dimmed and set in italics — unmistakably not a score — live figures carry the
+ * accent, and finished ones are plain and solid.
+ */
+.rg-proj,
+.lb-proj,
+.player__proj {
+  font-style: italic;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.rg-pts--pre,
+.lb-pts--pre { opacity: 0.75; }
+.rg-pts--live,
+.lb-pts--live,
+.player__points--live { color: var(--accent); }
+.rg-pts--final,
+.lb-pts--final,
+.player__points--final { color: var(--text); }
+
+/* "final", beside a number that is not going to change again. */
+.phase-tag {
+  margin-left: 4px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Where a total came from: the roster, and the picks. */
+.rg-split {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+.rg-split__bonus { color: var(--accent); }
+.lb-bonus { color: var(--accent); font-weight: 700; }
+
+/* How the picks actually went, above the pills. */
+.rg-picks__head {
+  margin-top: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.rg-pick__pts {
+  margin-left: 3px;
+  font-weight: 900;
+  color: var(--accent);
+}
+.pick-pts { font-weight: 800; }
+.rg-pick__mark { margin-left: 3px; font-weight: 900; }

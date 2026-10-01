@@ -1,5 +1,6 @@
 import type { ContestPlayer, LineupSelection, RosterSlot } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
+import { allFinal, phaseOfPlayer, type ScorePhase } from '../lib/engine/phase';
 import { DeltaBadge, Initials } from './ui';
 
 /**
@@ -16,6 +17,7 @@ export function RosterPanel({
   onToggleCaptain,
   captainMultiplier,
   pointDeltas,
+  phases,
   live,
   readOnly,
 }: {
@@ -30,9 +32,14 @@ export function RosterPanel({
   captainMultiplier?: number | null;
   /** playerId -> contest points just added. */
   pointDeltas?: Map<string, number>;
+  /** Where each game is up to, so a projection is not shown as a score. */
+  phases?: Map<string, ScorePhase>;
   live?: boolean;
   readOnly?: boolean;
 }) {
+  // Marking a score "final" only says something while others are not. Once
+  // every game is over it is on every line, which is no longer a distinction.
+  const mixed = phases ? !allFinal(phases) : false;
   const bySlot = new Map(lineup.map((line) => [line.slotId, line.playerId]));
   const captainSlotId = lineup.find((line) => line.captain)?.slotId ?? null;
   // Captain first, then most expensive to cheapest, with the spots still to
@@ -104,16 +111,26 @@ export function RosterPanel({
             {player ? (
               <div className="player__right">
                 {live ? (
-                  <span className="player__points">
-                    {(
-                      (player.normalizedPoints ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
-                    ).toFixed(1)}
-                    <DeltaBadge
-                      value={
-                        (pointDeltas?.get(player.id) ?? 0) * (isCaptain ? captainMultiplier ?? 1 : 1)
-                      }
-                    />
-                  </span>
+                  (() => {
+                    const phase = phases ? phaseOfPlayer(phases, player) : 'live';
+                    const multiplier = isCaptain ? captainMultiplier ?? 1 : 1;
+                    // Their game has not started: this is what they are expected
+                    // to do, not what they have done.
+                    if (phase === 'pre') {
+                      return (
+                        <span className="player__proj">
+                          proj {(player.projection.normalized * multiplier).toFixed(1)}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className={`player__points player__points--${phase}`}>
+                        {((player.normalizedPoints ?? 0) * multiplier).toFixed(1)}
+                        {phase === 'final' && mixed ? <span className="phase-tag">final</span> : null}
+                        <DeltaBadge value={(pointDeltas?.get(player.id) ?? 0) * multiplier} />
+                      </span>
+                    );
+                  })()
                 ) : (
                   <span className={`player__salary${isCaptain ? ' player__salary--captain' : ''}`}>
                     {formatMoney(

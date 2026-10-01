@@ -11,6 +11,7 @@ import { deriveStatus } from '../src/lib/engine/contestState';
 import type { Contest, ContestGame } from '../src/types';
 import type { LiveGameStats } from '../src/lib/providers/types';
 import { gameStateFrom } from '../src/lib/providers/mlb';
+import { phaseOfGame, phaseOfPlayer, phasesByGame } from '../src/lib/engine/phase';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -86,6 +87,28 @@ check('suspended is over for tonight', gameStateFrom({ abstractGameState: 'Live'
   const contest = contestOf([game('1', 'in', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
   const r = applyLiveResults(contest, [], []);
   check('a silent feed changes nothing', [r.games[0].state, r.status], ['in', 'live']);
+}
+
+/* What a number on screen means. */
+check('a game not started is a projection', phaseOfGame({ state: 'pre' }), 'pre');
+check('a game under way is live', phaseOfGame({ state: 'in' }), 'live');
+check('a finished game is final', phaseOfGame({ state: 'post' }), 'final');
+check('an unknown game reads as not started', phaseOfGame(undefined), 'pre');
+{
+  // The case that made a projection look like a score: one contest, games hours
+  // apart, so a player yet to play sat beside one who had finished.
+  const mixed = phasesByGame({
+    games: [game('1', 'post', 'x'), game('2', 'in', 'x'), game('3', 'pre', 'x')],
+  } as unknown as Contest);
+  check('each player is judged by their own game', [
+    phaseOfPlayer(mixed, { gameId: '1', started: true }),
+    phaseOfPlayer(mixed, { gameId: '2', started: true }),
+    phaseOfPlayer(mixed, { gameId: '3', started: false }),
+  ], ['final', 'live', 'pre']);
+  check('a player whose game is gone falls back to the flag', [
+    phaseOfPlayer(mixed, { gameId: 'missing', started: true }),
+    phaseOfPlayer(mixed, { gameId: 'missing', started: false }),
+  ], ['final', 'pre']);
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

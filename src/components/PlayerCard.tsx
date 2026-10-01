@@ -1,5 +1,6 @@
 import type { ContestPlayer } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
+import type { ScorePhase } from '../lib/engine/phase';
 import { DeltaBadge, Initials } from './ui';
 
 export interface PlayerCardProps {
@@ -9,6 +10,11 @@ export interface PlayerCardProps {
   unaffordable?: boolean;
   /** Show live points instead of the projection. */
   live?: boolean;
+  /**
+   * Where this player's own game is up to. A contest can be under way with
+   * half its games hours off, and a projection must not be read as a score.
+   */
+  phase?: ScorePhase;
   /** This player is the team captain. */
   captain?: boolean;
   /** Salary and points multiplier applied to the captain. */
@@ -32,6 +38,7 @@ export function PlayerCard({
   used,
   unaffordable,
   live,
+  phase,
   captain,
   captainMultiplier = 1.5,
   pointsDelta,
@@ -39,6 +46,9 @@ export function PlayerCard({
   onInfo,
   onToggleCaptain,
 }: PlayerCardProps) {
+  // The contest being under way does not mean this player's game is: until it
+  // starts, what they have is a projection, and it says so.
+  const started = phase ? phase !== 'pre' : Boolean(live);
   const scoring = (player.normalizedPoints ?? 0) > 0;
   const salary = captain ? Math.round(player.salary * captainMultiplier) : player.salary;
   const points = captain
@@ -56,7 +66,7 @@ export function PlayerCard({
     selected ? 'player--selected' : '',
     used && !selected ? 'player--used' : '',
     unaffordable && !selected ? 'player--unaffordable' : '',
-    live && scoring ? 'player--scoring' : '',
+    started && scoring ? 'player--scoring' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -103,7 +113,7 @@ export function PlayerCard({
           {player.statLine ? (
             <span className="player__stats">
               {/* Before kickoff this is last season's average, not a forecast of today. */}
-              {live ? null : <span className="stat-tag">avg</span>}
+              {started ? null : <span className="stat-tag">avg</span>}
               {player.statLine}
             </span>
           ) : null}
@@ -112,14 +122,12 @@ export function PlayerCard({
 
       <div className="player__right">
         <span className={`player__salary${captain ? ' player__salary--captain' : ''}`}>{formatMoney(salary)}</span>
-        {live ? (
-          <>
-            <span className="player__points">
-              {points.toFixed(1)} pts
-              <DeltaBadge value={shownDelta} />
-            </span>
-
-          </>
+        {started ? (
+          <span className={`player__points player__points--${phase ?? 'live'}`}>
+            {points.toFixed(1)} pts
+            {phase === 'final' ? <span className="phase-tag">final</span> : null}
+            <DeltaBadge value={shownDelta} />
+          </span>
         ) : (
           <span className="player__proj">proj {projection.toFixed(1)} pts</span>
         )}

@@ -1,6 +1,7 @@
 import type { Contest, LeaderboardRow } from '../types';
 import { PlayerName } from './PlayerName';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
+import { phaseOfPlayer, phasesByGame } from '../lib/engine/phase';
 
 /**
  * Every roster at once, as tiles.
@@ -22,6 +23,7 @@ export function RosterGrid({
 }) {
   const columns = rows.length <= 2 ? 1 : rows.length <= 4 ? 2 : rows.length <= 9 ? 3 : 4;
   const captainMultiplier = contest.captain?.multiplier ?? 1.5;
+  const phases = phasesByGame(contest);
 
   return (
     <div
@@ -38,18 +40,30 @@ export function RosterGrid({
             <span className="rg-name">{row.teamName ?? row.displayName}</span>
           </div>
 
-          <div className="rg-total">
-            {row.total.toFixed(1)}
-            {contest.gameWinner.enabled && row.bonusPoints > 0 ? (
-              <span className="rg-bonus">+{row.bonusPoints.toFixed(1)}</span>
-            ) : null}
-          </div>
+          <div className="rg-total">{row.total.toFixed(1)}</div>
+          {/* Where the total came from: a pick bonus is not a player's doing. */}
+          {contest.gameWinner.enabled ? (
+            <div className="rg-split">
+              <span>{row.fantasyPoints.toFixed(1)} roster</span>
+              <span className={row.bonusPoints > 0 ? 'rg-split__bonus' : undefined}>
+                {row.bonusPoints > 0 ? '+' : ''}
+                {row.bonusPoints.toFixed(1)} picks
+              </span>
+            </div>
+          ) : null}
 
           {row.lines ? (
             <div className="rg-lines">
               {row.lines.map((line) => {
                 const delta = line.player ? pointDeltas?.get(line.player.id) ?? 0 : 0;
                 const shown = Math.round(delta * (line.isCaptain ? captainMultiplier : 1) * 10) / 10;
+                const phase = phaseOfPlayer(phases, line.player);
+                // Nobody has a score before their game starts, so showing one —
+                // a flat 0.0 — reads as "played and did nothing". What they are
+                // expected to do is the honest number, said as an expectation.
+                const projected = line.player
+                  ? Math.round(line.player.projection.normalized * (line.isCaptain ? captainMultiplier : 1) * 10) / 10
+                  : 0;
                 return (
                   <div
                     className={`rg-line${shown > 0 ? ' rg-line--scored' : ''}${shown < 0 ? ' rg-line--dropped' : ''}`}
@@ -67,8 +81,14 @@ export function RosterGrid({
                         '—'
                       )}
                     </span>
-                    <span className="rg-pts">
-                      {line.normalizedPoints.toFixed(1)}
+                    <span className={`rg-pts rg-pts--${phase}`}>
+                      {phase === 'pre' && line.player ? (
+                        <span className="rg-proj" title="Projected — this game has not started">
+                          {projected.toFixed(1)}
+                        </span>
+                      ) : (
+                        line.normalizedPoints.toFixed(1)
+                      )}
                       {shown !== 0 ? (
                         <span className={`rg-delta${shown < 0 ? ' rg-delta--down' : ''}`}>
                           {shown > 0 ? '+' : ''}
@@ -85,6 +105,18 @@ export function RosterGrid({
           )}
 
           {contest.gameWinner.enabled && row.picks ? (
+            <>
+              <div className="rg-picks__head">
+                {/* Against decided games, not every game: "2/5" with three still
+                    to play reads as three wrong. */}
+                {row.correctPicks}/{row.decidedPicks} picks
+                {row.bonusPoints > 0 ? (
+                  <span className="rg-split__bonus"> +{row.bonusPoints.toFixed(1)}</span>
+                ) : null}
+                {row.totalPicks > row.decidedPicks ? (
+                  <span className="faint"> · {row.totalPicks - row.decidedPicks} open</span>
+                ) : null}
+              </div>
             <div className="rg-picks">
               {contest.games.map((game) => {
                 const pick = row.picks?.[game.id];
@@ -101,10 +133,16 @@ export function RosterGrid({
                   >
                     {team?.abbreviation ?? '—'}
                     {team && hasSpread(game) ? <span className="rg-pick__line">{formatLine(spreadFor(game, side))}</span> : null}
+                    {final && result !== 'pending' ? (
+                      <span className="rg-pick__mark">
+                        {result === 'covered' ? '✓' : result === 'push' ? '=' : '✗'}
+                      </span>
+                    ) : null}
                   </span>
                 );
               })}
             </div>
+            </>
           ) : null}
         </div>
       ))}

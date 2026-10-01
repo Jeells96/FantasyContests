@@ -5,6 +5,7 @@ import { LeaderboardList } from '../components/LeaderboardList';
 import { PlayerCard } from '../components/PlayerCard';
 import { PlayerSheet } from '../components/PlayerSheet';
 import { RosterPanel } from '../components/RosterPanel';
+import { phasesByGame } from '../lib/engine/phase';
 import { SalaryBar } from '../components/SalaryBar';
 import { ScoreOverlay } from '../components/ScoreOverlay';
 import { Banner, Empty, KeyValue, Spinner, SportPill, StatusPill } from '../components/ui';
@@ -122,6 +123,10 @@ export function ContestPage() {
       locked,
     });
   }, [contest, standings, entries, myEntry, playersById, uid, locked]);
+
+  // Which games have started and which have ended, so every number on the page
+  // can say whether it is a projection, a score so far, or a final one.
+  const phases = useMemo(() => (contest ? phasesByGame(contest) : new Map()), [contest]);
 
   const rosterComplete = Boolean(validation && validation.filledSlots === contest?.rosterSlots.length);
   // A game with no posted line cannot be picked, so it cannot hold up a lineup.
@@ -553,6 +558,7 @@ export function ContestPage() {
                       unaffordable={player.salary > spendable}
                       captain={hasCaptain && player.id === captainPlayerId}
                       captainMultiplier={capMultiplier}
+                      phase={phases.get(player.gameId)}
                       onClick={() => assignPlayer(player)}
                       onInfo={() => setDetail(player)}
                       onToggleCaptain={
@@ -577,6 +583,7 @@ export function ContestPage() {
                     </span>
                   </div>
                   <RosterPanel
+                    phases={phases}
                     slots={contest.rosterSlots}
                     lineup={lineup}
                     playersById={playersById}
@@ -718,6 +725,8 @@ function LockedLineup({
   bonus: number;
   pointDeltas: Map<string, number>;
 }) {
+  const phases = phasesByGame(contest);
+
   if (!hasEntry) {
     return (
       <Empty
@@ -758,6 +767,7 @@ function LockedLineup({
           playersById={playersById}
           captainMultiplier={captainEnabled(contest) ? captainMultiplier(contest) : null}
           pointDeltas={pointDeltas}
+          phases={phases}
           live
           readOnly
         />

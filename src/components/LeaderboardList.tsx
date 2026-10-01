@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Contest, LeaderboardRow } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
+import { phaseOfPlayer, phasesByGame } from '../lib/engine/phase';
 import { DeltaBadge, Empty } from './ui';
 import { RosterGrid } from './RosterGrid';
 import { PlayerName } from './PlayerName';
@@ -25,6 +26,8 @@ export function LeaderboardList({
   onOpenPlayer?: (playerId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const phases = phasesByGame(contest);
+  const bonusPer = contest.gameWinner.enabled ? contest.gameWinner.bonusPoints : 0;
   // The whole field at a glance is the more useful default.
   const [showAll, setShowAll] = useState(true);
 
@@ -71,14 +74,21 @@ export function LeaderboardList({
                 </span>
                 {row.teamName ? <span className="lb-sub">{row.displayName}</span> : null}
                 <span className="lb-sub">
-                  {row.fantasyPoints.toFixed(1)} pts
+                  {row.fantasyPoints.toFixed(1)} roster
                   {contest.gameWinner.enabled ? (
                     <>
-                      {' · '}
-                      {row.correctPicks}/{row.totalPicks} picks
-                      {row.bonusPoints > 0 ? ` (+${row.bonusPoints.toFixed(1)})` : ''}
+                      {' + '}
+                      <span className={row.bonusPoints > 0 ? 'lb-bonus' : undefined}>
+                        {row.bonusPoints.toFixed(1)} picks
+                      </span>
+                      {' ('}
+                      {row.correctPicks}/{row.decidedPicks} correct
+                      {row.totalPicks > row.decidedPicks ? `, ${row.totalPicks - row.decidedPicks} to come` : ''}
+                      {')'}
                     </>
-                  ) : null}
+                  ) : (
+                    ' pts'
+                  )}
                   {row.lines ? ` · ${formatMoney(row.salaryUsed)}` : ''}
                   {row.violations.length > 0 ? ' · invalid lineup' : ''}
                 </span>
@@ -96,7 +106,16 @@ export function LeaderboardList({
 
                 {row.lines ? (
                   <>
-                    {row.lines.map((line) => (
+                    {row.lines.map((line) => {
+                      const phase = phaseOfPlayer(phases, line.player);
+                      const projected = line.player
+                        ? Math.round(
+                            line.player.projection.normalized *
+                              (line.isCaptain ? contest.captain?.multiplier ?? 1.5 : 1) *
+                              10,
+                          ) / 10
+                        : 0;
+                      return (
                       <div className="lb-line" key={line.slot.id}>
                         <span className="faint" style={{ fontWeight: 700 }}>
                           {line.isCaptain ? <span className="cpt-badge">CPT</span> : line.slot.label}
@@ -114,7 +133,11 @@ export function LeaderboardList({
                                 {line.player.position} · {line.player.teamAbbr}
                               </span>
                               {line.player.statLine ? (
-                                <div className="tiny faint">{line.player.statLine}</div>
+                                <div className="tiny faint">
+                                  {/* Until they play, this is their average, not tonight. */}
+                                  {phase === 'pre' ? <span className="stat-tag">avg</span> : null}
+                                  {line.player.statLine}
+                                </div>
                               ) : null}
                             </>
                           ) : (
@@ -122,8 +145,17 @@ export function LeaderboardList({
                           )}
                         </span>
                         <span className="num faint">{line.player ? formatMoney(line.salary) : ''}</span>
-                        <span className="num" style={{ fontWeight: 800, minWidth: 54, textAlign: 'right' }}>
-                          {line.normalizedPoints.toFixed(1)}
+                        <span
+                          className={`num lb-pts lb-pts--${phase}`}
+                          style={{ fontWeight: 800, minWidth: 54, textAlign: 'right' }}
+                        >
+                          {phase === 'pre' && line.player ? (
+                            <span className="lb-proj" title="Projected — this game has not started">
+                              {projected.toFixed(1)}
+                            </span>
+                          ) : (
+                            line.normalizedPoints.toFixed(1)
+                          )}
                           {line.player ? (
                             <DeltaBadge
                               value={
@@ -134,12 +166,17 @@ export function LeaderboardList({
                           ) : null}
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
 
                     {contest.gameWinner.enabled && row.picks ? (
                       <div style={{ marginTop: 10 }}>
                         <div className="eyebrow" style={{ marginBottom: 6 }}>
-                          Spread picks
+                          Spread picks · {row.correctPicks}/{row.decidedPicks} correct
+                          {row.bonusPoints > 0 ? ` · +${row.bonusPoints.toFixed(1)} pts` : ''}
+                          {row.totalPicks > row.decidedPicks
+                            ? ` · ${row.totalPicks - row.decidedPicks} to come`
+                            : ''}
                         </div>
                         <div className="row row--wrap" style={{ gap: 6 }}>
                           {contest.games.map((game) => {
@@ -157,6 +194,14 @@ export function LeaderboardList({
                               >
                                 {team?.abbreviation ?? '—'}
                                 {team && hasSpread(game) ? ` ${formatLine(spreadFor(game, side))}` : ''}
+                                {final && result !== 'pending' ? (
+                                  <span className="pick-pts">
+                                    {' '}
+                                    {result === 'covered' ? `✓ +${bonusPer}` : result === 'push' ? '= push' : '✗'}
+                                  </span>
+                                ) : (
+                                  <span className="pick-pts faint"> · open</span>
+                                )}
                               </span>
                             );
                           })}

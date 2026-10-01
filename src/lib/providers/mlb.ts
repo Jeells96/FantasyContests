@@ -83,11 +83,17 @@ const ELIGIBILITY: Record<string, string[]> = {
   TWP: ['P', 'DH'],
 };
 
-function gameStateFrom(status: any): GameState {
+export function gameStateFrom(status: any): GameState {
   const abstract = String(status?.abstractGameState ?? '').toLowerCase();
+  const coded = String(status?.codedGameState ?? '');
+  const detailed = String(status?.detailedState ?? '').toLowerCase();
+  // A game called off is over as far as a one-night contest is concerned: it
+  // will not be played tonight, and a contest that waits for it never ends.
+  if (coded === 'C' || coded === 'D' || /postponed|cancelled|canceled|suspended/.test(detailed)) {
+    return 'post';
+  }
   if (abstract === 'live') return 'in';
   if (abstract === 'final') return 'post';
-  const coded = String(status?.codedGameState ?? '');
   if (coded === 'F' || coded === 'O') return 'post';
   if (coded === 'I') return 'in';
   return 'pre';
@@ -169,6 +175,24 @@ export class MlbProvider implements SportProvider {
   private fetchSchedule(date: string, cacheMs: number): Promise<any> {
     return getJson<any>(
       `${API}/schedule?sportId=1&date=${date}&hydrate=team,probablePitcher,lineups,linescore`,
+      { cacheMs },
+    );
+  }
+
+  /**
+   * The same schedule, asked for by game rather than by date.
+   *
+   * Baseball files a game under the local date it is played on, so a night game
+   * on the west coast belongs to a date its own UTC timestamp has already left.
+   * Asking by date therefore misses exactly the games this app is most often
+   * built around — an 8pm first pitch — and a miss is silent: no probable
+   * pitcher, so every starter is priced as if he might go, and no status, so
+   * the contest never learns the game ended. Game ids carry no timezone.
+   */
+  private fetchScheduleByIds(ids: string[], cacheMs: number): Promise<any> {
+    const key = [...new Set(ids)].sort().join(',');
+    return getJson<any>(
+      `${API}/schedule?sportId=1&gamePks=${key}&hydrate=team,probablePitcher,lineups,linescore`,
       { cacheMs },
     );
   }
@@ -375,32 +399,29 @@ export class MlbProvider implements SportProvider {
    * batting order once it is posted (a couple of hours before first pitch).
    */
   private async loadGameCards(games: ProviderGame[]): Promise<Map<string, GameCard>> {
-    const dates = new Set(games.map((game) => game.startTime.slice(0, 10)));
     const result = new Map<string, GameCard>();
-    for (const date of dates) {
-      const data = await this.fetchSchedule(date, 5 * 60_000).catch(() => null);
-      for (const day of data?.dates ?? []) {
-        for (const game of day?.games ?? []) {
-          const id = String(game?.gamePk ?? '');
-          const ids = (players: any): Set<string> =>
-            new Set((Array.isArray(players) ? players : []).map((p: any) => String(p?.id ?? '')).filter(Boolean));
-          const home = game?.teams?.home?.probablePitcher?.id;
-          const away = game?.teams?.away?.probablePitcher?.id;
-          result.set(id, {
-            probable: { home: home ? String(home) : undefined, away: away ? String(away) : undefined },
-            lineup: { home: ids(game?.lineups?.homePlayers), away: ids(game?.lineups?.awayPlayers) },
-          });
-        }
+    if (games.length === 0) return result;
+    const data = await this.fetchScheduleByIds(games.map((game) => game.id), 5 * 60_000).catch(() => null);
+    for (const day of data?.dates ?? []) {
+      for (const game of day?.games ?? []) {
+        const id = String(game?.gamePk ?? '');
+        const ids = (players: any): Set<string> =>
+          new Set((Array.isArray(players) ? players : []).map((p: any) => String(p?.id ?? '')).filter(Boolean));
+        const home = game?.teams?.home?.probablePitcher?.id;
+        const away = game?.teams?.away?.probablePitcher?.id;
+        result.set(id, {
+          probable: { home: home ? String(home) : undefined, away: away ? String(away) : undefined },
+          lineup: { home: ids(game?.lineups?.homePlayers), away: ids(game?.lineups?.awayPlayers) },
+        });
       }
     }
     return result;
   }
 
   async fetchLive(game: ProviderGame): Promise<LiveGameStats> {
-    const date = game.startTime.slice(0, 10);
     const [box, schedule, playByPlay] = await Promise.all([
       getJson<any>(`${API}/game/${game.id}/boxscore`, { cacheMs: 0 }),
-      this.fetchSchedule(date, 15_000).catch(() => null),
+      this.fetchScheduleByIds([game.id], 15_000).catch(() => null),
       // Only worth a request once there are plays to attribute anything to.
       game.state === 'pre'
         ? Promise.resolve(null)
@@ -413,12 +434,14 @@ export class MlbProvider implements SportProvider {
     let awayScore = 0;
     let winnerTeamId: string | null = null;
     let linescore: any = null;
+    let startTime: string | undefined;
 
     for (const day of schedule?.dates ?? []) {
       for (const scheduled of day?.games ?? []) {
         if (String(scheduled?.gamePk ?? '') !== game.id) continue;
         state = gameStateFrom(scheduled.status);
         statusDetail = String(scheduled?.status?.detailedState ?? statusDetail);
+        if (typeof scheduled?.gameDate === 'string') startTime = scheduled.gameDate;
         homeScore = toNumber(scheduled?.teams?.home?.score);
         awayScore = toNumber(scheduled?.teams?.away?.score);
         linescore = scheduled?.linescore ?? null;
@@ -467,7 +490,7 @@ export class MlbProvider implements SportProvider {
     };
     const plays = readPlays(playByPlay, { awayScore, homeScore });
 
-    return { gameId: game.id, state, statusDetail, homeScore, awayScore, winnerTeamId, players, situation, plays };
+    return { gameId: game.id, state, statusDetail, startTime, homeScore, awayScore, winnerTeamId, players, situation, plays };
   }
 }
 

@@ -84,6 +84,12 @@ export interface LiveGameStats {
   homeScore: number;
   awayScore: number;
   winnerTeamId: string | null;
+  /**
+   * First pitch as the feed gives it now. Schedules move after a contest is
+   * built, and a start time nobody refreshes is what locks a contest hours
+   * before anyone takes the field.
+   */
+  startTime?: string;
   /** playerId -> canonical live stats. Includes synthetic team units. */
   players: Record<string, StatMap>;
   situation?: GameSituation;

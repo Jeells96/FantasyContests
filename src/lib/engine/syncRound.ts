@@ -1,7 +1,9 @@
-import { getContest, getPool, patchContest, writeLivePool } from '../db';
+import { getContest, getEntries, getPool, getStandings, patchContest, writeLivePool } from '../db';
 import { deriveStatus } from './contestState';
+import { buildLeaderboard, toResults } from './leaderboard';
 import { applyLiveResults, mergeScoringLog } from './liveSync';
 import { fetchLiveForGames } from '../providers';
+import type { Contest, ContestPlayer } from '../../types';
 
 /** A sync this recent means another tab already did the work. */
 export const FRESH_MS = 25_000;
@@ -32,15 +34,54 @@ export async function runSyncRound(contestId: string, force = false): Promise<bo
   const live = await fetchLiveForGames(fresh.games);
   if (live.length === 0) return false;
 
-  const { games, players, status, events } = applyLiveResults(fresh, pool, live);
+  const { games, players, status, lockTime, events } = applyLiveResults(fresh, pool, live);
   await writeLivePool(contestId, players);
   await patchContest(contestId, {
     games,
     status,
+    // Only when a game actually moved; patchContest re-derives the lock the
+    // security rules compare against from it.
+    ...(lockTime ? { lockTime } : {}),
     scoringLog: mergeScoringLog(fresh.scoringLog, events),
     lastSyncAt: new Date().toISOString(),
   });
+
+  if (status === 'complete') await recordResults({ ...fresh, games, status }, players);
   return true;
+}
+
+/**
+ * Write down who won, once the last game is over.
+ *
+ * Standings and entries are only ever assembled while someone is looking, so a
+ * contest nobody opens again would have no record of its own result — and the
+ * contest list has to be able to say who won without rebuilding every finished
+ * contest's leaderboard. Finalising by hand already did this; the difference is
+ * that a contest now does it for itself when its last game ends.
+ *
+ * Written once: a result that is already recorded is the one that stands.
+ */
+async function recordResults(contest: Contest, players: ContestPlayer[]): Promise<void> {
+  if (contest.finalizedAt || (contest.results?.length ?? 0) > 0) return;
+  try {
+    const [entries, standings] = await Promise.all([getEntries(contest.id), getStandings(contest.id)]);
+    if (standings.length === 0) return;
+    const rows = buildLeaderboard({
+      contest,
+      standings,
+      entries,
+      players: new Map(players.map((player) => [player.id, player])),
+      selfUid: null,
+      locked: true,
+    });
+    await patchContest(contest.id, {
+      finalizedAt: new Date().toISOString(),
+      results: toResults(rows),
+    });
+  } catch {
+    // The result is still there to be read from the contest itself; recording
+    // it is a convenience for the list, never a thing worth failing a round for.
+  }
 }
 
 /**

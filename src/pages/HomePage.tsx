@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { ContestCard } from '../components/ContestCard';
+import { ContestCard, CompletedContestRow } from '../components/ContestCard';
 import { Banner, Empty, Spinner } from '../components/ui';
 import {
   countEntrants,
+  declineInvitation,
   findContestByJoinCode,
   getMyEntry,
   joinContest,
@@ -172,17 +173,25 @@ export function HomePage() {
                 <h2>{HEADINGS[status]}</h2>
                 <span className="tiny faint">{list.length}</span>
               </div>
-              <div className="grid grid--contests">
-                {list.map((contest) => (
-                  <ContestCard
-                    key={contest.id}
-                    contest={{ ...contest, entrantCount: counts[contest.id] ?? contest.entrantCount }}
-                    entered={entered.has(contest.id)}
-                    isOwner={contest.ownerId === uid}
-                    openPicks={openPicks[contest.id] ?? 0}
-                  />
-                ))}
-              </div>
+              {status === 'complete' ? (
+                <div>
+                  {list.map((contest) => (
+                    <CompletedContestRow key={contest.id} contest={contest} uid={uid} />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid--contests">
+                  {list.map((contest) => (
+                    <ContestCard
+                      key={contest.id}
+                      contest={{ ...contest, entrantCount: counts[contest.id] ?? contest.entrantCount }}
+                      entered={entered.has(contest.id)}
+                      isOwner={contest.ownerId === uid}
+                      openPicks={openPicks[contest.id] ?? 0}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           );
         })}
@@ -270,19 +279,34 @@ function Invitation({ contest, uid }: { contest: Contest; uid: string }) {
           {rosterSummary(contest.rosterSlots)} · locks {formatDateTime(contest.lockTime)}
         </span>
       </span>
-      <button
-        type="button"
-        className="btn btn--sm btn--primary"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          // The write syncs on its own; opening the contest need not wait.
-          void joinContest(contest.id, uid);
-          navigate(`/contest/${contest.id}`);
-        }}
-      >
-        Join
-      </button>
+      <span className="row" style={{ gap: 6, flex: 'none' }}>
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            // Only off the invitation list: their code still works if they
+            // change their mind.
+            void declineInvitation(contest.id, uid);
+          }}
+        >
+          <span className="tiny faint">No thanks</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm btn--primary"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            // The write syncs on its own; opening the contest need not wait.
+            void joinContest(contest.id, uid);
+            navigate(`/contest/${contest.id}`);
+          }}
+        >
+          Join
+        </button>
+      </span>
     </div>
   );
 }

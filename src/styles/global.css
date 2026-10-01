@@ -2217,3 +2217,28 @@ h4 {
 .cpt-toggle:active {
   transform: scale(0.92);
 }
+
+/* A finished contest, reduced to its result so a season of them stays short. */
+.done-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev-1);
+  margin-bottom: 6px;
+}
+.done-row:active { background: var(--bg-elev-2); }
+.done-row__main { min-width: 0; display: grid; gap: 1px; }
+.done-row__name {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.done-row__result { flex: none; display: grid; justify-items: end; gap: 1px; }
+.done-row__winner { font-size: 12.5px; font-weight: 800; color: var(--text-muted); }
+.done-row__winner--me { color: var(--good); }

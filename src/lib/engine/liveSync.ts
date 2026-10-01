@@ -3,12 +3,17 @@ import type { GamePlay, LiveGameStats } from '../providers/types';
 import { computeRawFantasyPoints } from '../scoring';
 import { formatStatLine, hasActivity } from '../stats';
 import { normalizationFactor } from './normalization';
-import { deriveStatus } from './contestState';
+import { deriveStatus, earliestStart } from './contestState';
 
 export interface LiveSyncResult {
   games: ContestGame[];
   players: ContestPlayer[];
   status: Contest['status'];
+  /**
+   * When the feed has moved a game that has not started yet, the contest's new
+   * lock moment. Absent when nothing moved.
+   */
+  lockTime?: string;
   /** Players currently holding a non-zero score. */
   scoringPlayers: number;
   /** Point increases in this round, newest first. */
@@ -40,6 +45,11 @@ export function applyLiveResults(
     if (!result) return game;
     return {
       ...game,
+      // A game that has not started can still be moved, and a start time nobody
+      // refreshes is what shows a contest as live hours before anyone takes the
+      // field. Once it is under way its scheduled time is history, so the feed
+      // only gets to correct a game it still calls upcoming.
+      startTime: result.state === 'pre' && result.startTime ? result.startTime : game.startTime,
       state: result.state,
       statusDetail: result.statusDetail,
       winnerTeamId: result.winnerTeamId,
@@ -131,10 +141,18 @@ export function applyLiveResults(
   }
   events.sort(byNewestFirst);
 
+  // The lock follows the earliest game, so a postponement carries it along.
+  // Minutes rather than milliseconds, to ignore a feed restating the same time.
+  const nextLock = earliestStart(games);
+  const moved =
+    nextLock !== '' &&
+    Math.abs(Date.parse(nextLock) - Date.parse(contest.lockTime)) >= 60_000;
+
   return {
     games,
     players,
-    status: deriveStatus({ ...contest, games }),
+    status: deriveStatus({ ...contest, games, lockTime: moved ? nextLock : contest.lockTime }),
+    ...(moved ? { lockTime: nextLock } : {}),
     scoringPlayers: players.filter((player) => (player.normalizedPoints ?? 0) !== 0).length,
     events,
   };

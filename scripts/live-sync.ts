@@ -17,6 +17,7 @@ import {
   doc,
   getDocs,
   initializeFirestore,
+  Timestamp,
   updateDoc,
   writeBatch,
   type Firestore,
@@ -105,7 +106,7 @@ async function syncContest(db: Firestore, contest: Contest): Promise<void> {
   }
 
   const live = await fetchLiveForGames(contest.games);
-  const { games, players, status, scoringPlayers, events } = applyLiveResults(contest, pool, live);
+  const { games, players, status, lockTime, scoringPlayers, events } = applyLiveResults(contest, pool, live);
   const chunks = await writePool(db, contest.id, players);
 
   const standingsSnapshot = await getDocs(collection(db, 'contests', contest.id, 'standings'));
@@ -123,6 +124,14 @@ async function syncContest(db: Firestore, contest: Contest): Promise<void> {
     lastSyncAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+
+  // A game that moved takes the lock with it — including `lockAt`, which is the
+  // copy the security rules read. Leaving that behind would show a contest as
+  // open while the database went on refusing every lineup written into it.
+  if (lockTime) {
+    patch.lockTime = lockTime;
+    patch.lockAt = Timestamp.fromDate(new Date(lockTime));
+  }
 
   if (autoFinalize && allGamesFinal({ games }) && !contest.finalizedAt) {
     const entriesSnapshot = await getDocs(collection(db, 'contests', contest.id, 'entries'));

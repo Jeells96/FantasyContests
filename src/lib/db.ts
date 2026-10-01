@@ -55,6 +55,7 @@ function contestFromDoc(id: string, data: DocumentData): Contest {
     ownerId: data.ownerId ?? '',
     ownerName: data.ownerName ?? undefined,
     members: Array.isArray(data.members) ? data.members : [],
+    declinedBy: Array.isArray(data.declinedBy) ? data.declinedBy : [],
     invites: Array.isArray(data.invites) ? data.invites : [],
     inviteKeys: Array.isArray(data.inviteKeys) ? data.inviteKeys : [],
     sports: data.sports ?? [],
@@ -166,6 +167,8 @@ export function listenMyInvitations(
         snapshot.docs
           .map((d) => contestFromDoc(d.id, d.data()))
           .filter((contest) => !contest.members.includes(uid))
+          // An invitation turned down stays down, on every device they use.
+          .filter((contest) => !(contest.declinedBy ?? []).includes(uid))
           .sort((a, b) => a.lockTime.localeCompare(b.lockTime)),
       ),
     (error) => onError?.(error),
@@ -178,6 +181,17 @@ export async function findContestByJoinCode(code: string): Promise<Contest | nul
   );
   const found = snapshot.docs[0];
   return found ? contestFromDoc(found.id, found.data()) : null;
+}
+
+/**
+ * Turn an invitation down.
+ *
+ * Recorded on the contest rather than on the device, so it is the person who
+ * declined and not one of their phones. Joining later by code still works: this
+ * only takes it off the invitation list.
+ */
+export async function declineInvitation(contestId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db, CONTESTS, contestId), { declinedBy: arrayUnion(uid) });
 }
 
 /** Add this device to a contest's members, so it appears on their contests page. */

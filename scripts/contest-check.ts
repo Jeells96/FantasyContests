@@ -1,0 +1,92 @@
+/**
+ * Does a contest know when it is over?
+ *
+ * The failures these cover all looked the same from outside — a contest that
+ * said "live" days after its last out — but came from different places: a game
+ * whose status never arrived, a game called off that never could go final, and
+ * a start time that moved after the contest was built.
+ */
+import { applyLiveResults } from '../src/lib/engine/liveSync';
+import { deriveStatus } from '../src/lib/engine/contestState';
+import type { Contest, ContestGame } from '../src/types';
+import type { LiveGameStats } from '../src/lib/providers/types';
+import { gameStateFrom } from '../src/lib/providers/mlb';
+
+let failures = 0;
+function check(label: string, actual: unknown, expected: unknown) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (!ok) failures += 1;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${ok ? '' : `\n       got ${JSON.stringify(actual)} want ${JSON.stringify(expected)}`}`);
+}
+
+const game = (id: string, state: ContestGame['state'], startTime: string): ContestGame =>
+  ({
+    id, state, startTime, shortName: `G${id}`, statusDetail: '',
+    home: { id: `h${id}`, abbreviation: 'HOM', name: 'Home', score: 0 },
+    away: { id: `a${id}`, abbreviation: 'AWY', name: 'Away', score: 0 },
+  }) as unknown as ContestGame;
+
+const contestOf = (games: ContestGame[], lockTime: string): Contest =>
+  ({
+    id: 'c', games, lockTime, rosterSlots: [], scoring: {},
+    normalization: {}, salaryCapInfo: { cap: 0 }, scoringLog: [],
+  }) as unknown as Contest;
+
+const live = (gameId: string, state: LiveGameStats['state'], extra: Partial<LiveGameStats> = {}): LiveGameStats => ({
+  gameId, state, statusDetail: '', homeScore: 0, awayScore: 0, winnerTeamId: null, players: {}, ...extra,
+});
+
+/* What baseball actually puts in the status field. */
+check('final', gameStateFrom({ abstractGameState: 'Final', codedGameState: 'F', detailedState: 'Final' }), 'post');
+check('in progress', gameStateFrom({ abstractGameState: 'Live', codedGameState: 'I', detailedState: 'In Progress' }), 'in');
+check('scheduled', gameStateFrom({ abstractGameState: 'Preview', codedGameState: 'S', detailedState: 'Scheduled' }), 'pre');
+check('pre-game', gameStateFrom({ abstractGameState: 'Preview', codedGameState: 'P', detailedState: 'Pre-Game' }), 'pre');
+// These three read as upcoming forever, which is what hung a contest.
+check('postponed is over for tonight', gameStateFrom({ abstractGameState: 'Preview', codedGameState: 'D', detailedState: 'Postponed' }), 'post');
+check('cancelled is over for tonight', gameStateFrom({ abstractGameState: 'Preview', codedGameState: 'C', detailedState: 'Cancelled' }), 'post');
+check('suspended is over for tonight', gameStateFrom({ abstractGameState: 'Live', codedGameState: 'U', detailedState: 'Suspended: Rain' }), 'post');
+
+/* A game whose status finally arrives takes the contest with it. */
+{
+  const contest = contestOf([game('1', 'post', '2026-09-29T18:00:00Z'), game('2', 'pre', '2026-09-30T00:00:00Z')], '2026-09-29T18:00:00Z');
+  check('still live while one game is unfinished', deriveStatus(contest), 'live');
+  const r = applyLiveResults(contest, [], [live('1', 'post'), live('2', 'post')]);
+  check('complete once the last game goes final', r.status, 'complete');
+}
+
+/* A game called off can never go final, so it must not hold the contest open. */
+{
+  const contest = contestOf([game('1', 'post', '2026-09-29T18:00:00Z'), game('2', 'pre', '2026-09-30T00:00:00Z')], '2026-09-29T18:00:00Z');
+  const r = applyLiveResults(contest, [], [live('1', 'post'), live('2', 'post', { statusDetail: 'Postponed' })]);
+  check('a called-off game does not hold a contest open', r.status, 'complete');
+}
+
+/* A start time that moves carries the lock with it, but only before first pitch. */
+{
+  const contest = contestOf([game('1', 'pre', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
+  const r = applyLiveResults(contest, [], [live('1', 'pre', { startTime: '2026-10-02T00:00:00Z' })]);
+  check('an upcoming game adopts the feed time', r.games[0].startTime, '2026-10-02T00:00:00Z');
+  check('and the lock follows it', r.lockTime, '2026-10-02T00:00:00Z');
+  check('so the contest is open again', r.status, 'open');
+}
+{
+  const contest = contestOf([game('1', 'in', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
+  const r = applyLiveResults(contest, [], [live('1', 'in', { startTime: '2026-10-02T00:00:00Z' })]);
+  check('a game under way keeps the time it started', r.games[0].startTime, '2026-10-01T18:00:00Z');
+  check('and nothing moves the lock', r.lockTime, undefined);
+}
+{
+  const contest = contestOf([game('1', 'pre', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
+  const r = applyLiveResults(contest, [], [live('1', 'pre', { startTime: '2026-10-01T18:00:30Z' })]);
+  check('the feed restating the same time moves nothing', r.lockTime, undefined);
+}
+
+/* A game the feed says nothing about keeps what it had. */
+{
+  const contest = contestOf([game('1', 'in', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
+  const r = applyLiveResults(contest, [], []);
+  check('a silent feed changes nothing', [r.games[0].state, r.status], ['in', 'live']);
+}
+
+console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);
+process.exit(failures === 0 ? 0 : 1);

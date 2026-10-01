@@ -87,3 +87,47 @@ export function ContestCard({
     </div>
   );
 }
+
+/**
+ * A finished contest, in one line.
+ *
+ * A contest that is over is a result, not an invitation to do anything, so it
+ * gets a line rather than a card: who won, and by how much. They pile up week
+ * on week, and a season of them should not be what stands between someone and
+ * the contest they are actually playing.
+ */
+export function CompletedContestRow({ contest, uid }: { contest: Contest; uid: string }) {
+  const winner = (contest.results ?? []).find((row) => row.rank === 1);
+  const mine = (contest.results ?? []).find((row) => row.uid === uid);
+  const iWon = Boolean(winner && mine && winner.uid === mine.uid);
+
+  return (
+    <Link to={`/contest/${contest.id}`} className="done-row" style={{ color: 'inherit' }}>
+      <span className="done-row__main">
+        <span className="done-row__name">{contest.name}</span>
+        <span className="tiny faint">
+          {formatDateTime(contest.lockTime)}
+          {mine && !iWon ? ` · you finished ${ordinal(mine.rank)}` : ''}
+        </span>
+      </span>
+      <span className="done-row__result">
+        {winner ? (
+          <>
+            <span className={`done-row__winner${iWon ? ' done-row__winner--me' : ''}`}>
+              {iWon ? 'You won' : winner.displayName}
+            </span>
+            <span className="tiny faint num">{winner.total.toFixed(1)}</span>
+          </>
+        ) : (
+          <span className="tiny faint">Final</span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
+function ordinal(rank: number): string {
+  const tens = rank % 100;
+  if (tens >= 11 && tens <= 13) return `${rank}th`;
+  return `${rank}${['th', 'st', 'nd', 'rd'][rank % 10] ?? 'th'}`;
+}

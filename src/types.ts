@@ -270,6 +270,8 @@ export interface Contest {
   invites?: ContestInvite[];
   /** The invited people's match keys, so a device can find its invitations. */
   inviteKeys?: string[];
+  /** Who turned the invitation down. Kept so it stays turned down everywhere. */
+  declinedBy?: string[];
   sports: Sport[];
   games: ContestGame[];
   rosterSlots: RosterSlot[];

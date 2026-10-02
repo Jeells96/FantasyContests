@@ -12,6 +12,7 @@ import type { Contest, ContestGame } from '../src/types';
 import type { LiveGameStats } from '../src/lib/providers/types';
 import { gameStateFrom } from '../src/lib/providers/mlb';
 import { phaseOfGame, phaseOfPlayer, phasesByGame } from '../src/lib/engine/phase';
+import { ownershipOf } from '../src/lib/engine/ownership';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -117,6 +118,27 @@ check('an unknown game reads as not started', phaseOfGame(undefined), 'pre');
     phaseOfPlayer(mixed, { gameId: 'missing', started: true }),
     phaseOfPlayer(mixed, { gameId: 'missing', started: false }),
   ], ['final', 'pre']);
+}
+
+/* How many teams took each player. */
+{
+  const line = (id: string | null) => ({ player: id ? { id } : null }) as never;
+  const own = ownershipOf([
+    { lines: [line('a'), line('b'), line(null)] },
+    { lines: [line('a'), line('c')] },
+    { lines: null },
+  ] as never);
+  check('counted against the teams that can be seen', own.teams, 2);
+  check('a player on every roster', own.byPlayer.get('a'), 2);
+  check('a player only one team took', own.byPlayer.get('b'), 1);
+  check('a player nobody took is absent', own.byPlayer.get('zz'), undefined);
+  check('an empty slot counts for nobody', own.byPlayer.has('null'), false);
+}
+{
+  // A roster can field the same player twice; he is still one team's pick.
+  const line = (id: string) => ({ player: { id } }) as never;
+  const own = ownershipOf([{ lines: [line('a'), line('a')] }] as never);
+  check('a player used twice counts once', own.byPlayer.get('a'), 1);
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

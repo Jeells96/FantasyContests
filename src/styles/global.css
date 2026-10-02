@@ -1581,12 +1581,13 @@ h4 {
   margin-top: 1px;
 }
 
+/* A player is two rows: the name with the score, then a smaller line beneath
+   carrying what they cost and how many teams took them. A full salary cannot
+   share a row with a name in a tile this narrow without one of them losing. */
 .rg-line {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 1px 3px;
+  flex-direction: column;
+  padding: 1px 3px 2px;
   border-radius: 4px;
   font-size: 10px;
   line-height: 1.35;
@@ -1609,10 +1610,12 @@ h4 {
 }
 
 .rg-cpt {
+  flex: none;
   margin-right: 3px;
   color: var(--warn);
   font-weight: 900;
   font-size: 9px;
+  line-height: inherit;
 }
 
 .rg-pts {
@@ -2314,21 +2317,41 @@ h4 {
 .rg-who {
   display: flex;
   align-items: center;
-  gap: 3px;
-  flex: 1 1 auto;
+  justify-content: space-between;
+  gap: 4px;
   min-width: 0;
   line-height: inherit;
 }
 .rg-who .rg-player {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   line-height: inherit;
 }
-.rg-sal {
-  flex: none;
-  font-size: 0.85em;
+.rg-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  /* Clear of the underline a tappable name carries, which otherwise reads as
+     though the salary beneath it were underlined. */
+  margin-top: 1px;
+  line-height: 1.15;
+}
+.rg-sal,
+.rg-own {
+  font-size: 0.8em;
   font-weight: 600;
-  line-height: inherit;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rg-sal { flex: none; }
+/* How many teams have him: the lower it is, the more he is worth having. It
+   gives way first, since the salary is the figure being looked up. */
+.rg-own {
+  color: var(--text-dim);
+  opacity: 0.7;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

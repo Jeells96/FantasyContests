@@ -141,15 +141,3 @@ export function formatMoney(value: number): string {
   return `${sign}$${Math.abs(Math.round(value)).toLocaleString('en-US')}`;
 }
 
-/**
- * The same figure in four characters, for places where a full "$12,400" would
- * crowd out the name it sits beside. No dollar sign: next to a player in a
- * lineup there is nothing else it could be.
- */
-export function formatMoneyShort(value: number): string {
-  const rounded = Math.abs(Math.round(value));
-  const sign = value < 0 ? '-' : '';
-  if (rounded < 1000) return `${sign}${rounded}`;
-  const thousands = rounded / 1000;
-  return `${sign}${thousands < 10 ? thousands.toFixed(1) : Math.round(thousands)}k`;
-}

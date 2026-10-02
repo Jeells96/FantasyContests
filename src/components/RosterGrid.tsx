@@ -1,5 +1,6 @@
 import type { Contest, LeaderboardRow } from '../types';
-import { formatMoneyShort } from '../lib/engine/lineup';
+import { formatMoney } from '../lib/engine/lineup';
+import { ownershipOf } from '../lib/engine/ownership';
 import { PlayerName } from './PlayerName';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
 import { phaseOfPlayer, phasesByGame } from '../lib/engine/phase';
@@ -25,15 +26,8 @@ export function RosterGrid({
   const columns = rows.length <= 2 ? 1 : rows.length <= 4 ? 2 : rows.length <= 9 ? 3 : 4;
   const captainMultiplier = contest.captain?.multiplier ?? 1.5;
   const phases = phasesByGame(contest);
-  /*
-   * Salary beside the name, while there is a name left to put it beside.
-   *
-   * At four columns a tile is under 90px wide and the names are already
-   * truncating on their own; a salary there costs the player's name and gives
-   * little back, since squeezing it small enough to fit rounds half the roster
-   * to the same figure. A full group gets names, everyone else gets both.
-   */
-  const showSalary = columns < 4;
+  // What each player cost, and how many of the teams here took him.
+  const ownership = ownershipOf(rows);
 
   return (
     <div
@@ -80,8 +74,10 @@ export function RosterGrid({
                     key={line.slot.id}
                   >
                     <span className="rg-who">
+                      {/* Outside the name, so a long name truncates around the
+                          badge rather than the badge surviving alone. */}
+                      {line.isCaptain ? <span className="rg-cpt">C</span> : null}
                       <span className="rg-player">
-                        {line.isCaptain ? <span className="rg-cpt">C</span> : null}
                         {line.player ? (
                           <PlayerName
                             name={shortName(line.player.name, line.player.teamAbbr)}
@@ -92,27 +88,33 @@ export function RosterGrid({
                           '—'
                         )}
                       </span>
-                      {/* What they cost, beside what they are worth. The name
-                          gives up room for it rather than the tile. */}
-                      {line.player && showSalary ? (
-                        <span className="rg-sal">{formatMoneyShort(line.salary)}</span>
-                      ) : null}
+                      <span className={`rg-pts rg-pts--${phase}`}>
+                        {phase === 'pre' && line.player ? (
+                          <span className="rg-proj" title="Projected — this game has not started">
+                            {projected.toFixed(1)}
+                          </span>
+                        ) : (
+                          line.normalizedPoints.toFixed(1)
+                        )}
+                        {shown !== 0 ? (
+                          <span className={`rg-delta${shown < 0 ? ' rg-delta--down' : ''}`}>
+                            {shown > 0 ? '+' : ''}
+                            {shown.toFixed(1)}
+                          </span>
+                        ) : null}
+                      </span>
                     </span>
-                    <span className={`rg-pts rg-pts--${phase}`}>
-                      {phase === 'pre' && line.player ? (
-                        <span className="rg-proj" title="Projected — this game has not started">
-                          {projected.toFixed(1)}
+                    {/* What they cost and how rare they are, on their own small
+                        line: a full salary cannot share a tile row with a name
+                        without one of them losing. */}
+                    {line.player ? (
+                      <span className="rg-meta">
+                        <span className="rg-sal">{formatMoney(line.salary)}</span>
+                        <span className="rg-own">
+                          {ownership.byPlayer.get(line.player.id) ?? 0}/{ownership.teams} teams
                         </span>
-                      ) : (
-                        line.normalizedPoints.toFixed(1)
-                      )}
-                      {shown !== 0 ? (
-                        <span className={`rg-delta${shown < 0 ? ' rg-delta--down' : ''}`}>
-                          {shown > 0 ? '+' : ''}
-                          {shown.toFixed(1)}
-                        </span>
-                      ) : null}
-                    </span>
+                      </span>
+                    ) : null}
                   </div>
                 );
               })}

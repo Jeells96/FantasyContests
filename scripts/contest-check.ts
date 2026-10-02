@@ -62,23 +62,31 @@ check('suspended is over for tonight', gameStateFrom({ abstractGameState: 'Live'
   check('a called-off game does not hold a contest open', r.status, 'complete');
 }
 
-/* A start time that moves carries the lock with it, but only before first pitch. */
+/* A start time that moves carries the lock with it, but only before first pitch.
+ * Relative to now, not to a date in the calendar: whether a contest is open
+ * turns on whether its lock has passed, so fixed dates make these pass in
+ * October and fail in November. */
+const iso = (hoursFromNow: number) => new Date(Date.now() + hoursFromNow * 3_600_000).toISOString();
 {
-  const contest = contestOf([game('1', 'pre', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
-  const r = applyLiveResults(contest, [], [live('1', 'pre', { startTime: '2026-10-02T00:00:00Z' })]);
-  check('an upcoming game adopts the feed time', r.games[0].startTime, '2026-10-02T00:00:00Z');
-  check('and the lock follows it', r.lockTime, '2026-10-02T00:00:00Z');
+  const was = iso(-1);
+  const moved = iso(5);
+  const contest = contestOf([game('1', 'pre', was)], was);
+  const r = applyLiveResults(contest, [], [live('1', 'pre', { startTime: moved })]);
+  check('an upcoming game adopts the feed time', r.games[0].startTime, moved);
+  check('and the lock follows it', r.lockTime, moved);
   check('so the contest is open again', r.status, 'open');
 }
 {
-  const contest = contestOf([game('1', 'in', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
-  const r = applyLiveResults(contest, [], [live('1', 'in', { startTime: '2026-10-02T00:00:00Z' })]);
-  check('a game under way keeps the time it started', r.games[0].startTime, '2026-10-01T18:00:00Z');
+  const was = iso(-1);
+  const contest = contestOf([game('1', 'in', was)], was);
+  const r = applyLiveResults(contest, [], [live('1', 'in', { startTime: iso(5) })]);
+  check('a game under way keeps the time it started', r.games[0].startTime, was);
   check('and nothing moves the lock', r.lockTime, undefined);
 }
 {
-  const contest = contestOf([game('1', 'pre', '2026-10-01T18:00:00Z')], '2026-10-01T18:00:00Z');
-  const r = applyLiveResults(contest, [], [live('1', 'pre', { startTime: '2026-10-01T18:00:30Z' })]);
+  const was = iso(-1);
+  const contest = contestOf([game('1', 'pre', was)], was);
+  const r = applyLiveResults(contest, [], [live('1', 'pre', { startTime: new Date(Date.parse(was) + 30_000).toISOString() })]);
   check('the feed restating the same time moves nothing', r.lockTime, undefined);
 }
 

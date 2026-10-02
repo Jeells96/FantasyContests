@@ -2306,3 +2306,29 @@ h4 {
 }
 .pick-pts { font-weight: 800; }
 .rg-pick__mark { margin-left: 3px; font-weight: 900; }
+
+/* Salary beside the name in a grid tile. The name is the only thing that gives
+   up room: the salary never shrinks and the tile never grows, so adding it
+   cannot reflow the grid. Both are held to the row's own line height — a taller
+   line box here would push every tile down a pixel and resize the whole grid. */
+.rg-who {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: inherit;
+}
+.rg-who .rg-player {
+  flex: 0 1 auto;
+  min-width: 0;
+  line-height: inherit;
+}
+.rg-sal {
+  flex: none;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: inherit;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}

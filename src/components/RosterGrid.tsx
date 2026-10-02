@@ -1,4 +1,5 @@
 import type { Contest, LeaderboardRow } from '../types';
+import { formatMoneyShort } from '../lib/engine/lineup';
 import { PlayerName } from './PlayerName';
 import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
 import { phaseOfPlayer, phasesByGame } from '../lib/engine/phase';
@@ -24,6 +25,15 @@ export function RosterGrid({
   const columns = rows.length <= 2 ? 1 : rows.length <= 4 ? 2 : rows.length <= 9 ? 3 : 4;
   const captainMultiplier = contest.captain?.multiplier ?? 1.5;
   const phases = phasesByGame(contest);
+  /*
+   * Salary beside the name, while there is a name left to put it beside.
+   *
+   * At four columns a tile is under 90px wide and the names are already
+   * truncating on their own; a salary there costs the player's name and gives
+   * little back, since squeezing it small enough to fit rounds half the roster
+   * to the same figure. A full group gets names, everyone else gets both.
+   */
+  const showSalary = columns < 4;
 
   return (
     <div
@@ -69,17 +79,24 @@ export function RosterGrid({
                     className={`rg-line${shown > 0 ? ' rg-line--scored' : ''}${shown < 0 ? ' rg-line--dropped' : ''}`}
                     key={line.slot.id}
                   >
-                    <span className="rg-player">
-                      {line.isCaptain ? <span className="rg-cpt">C</span> : null}
-                      {line.player ? (
-                        <PlayerName
-                          name={shortName(line.player.name, line.player.teamAbbr)}
-                          playerId={line.player.id}
-                          onOpenPlayer={onOpenPlayer}
-                        />
-                      ) : (
-                        '—'
-                      )}
+                    <span className="rg-who">
+                      <span className="rg-player">
+                        {line.isCaptain ? <span className="rg-cpt">C</span> : null}
+                        {line.player ? (
+                          <PlayerName
+                            name={shortName(line.player.name, line.player.teamAbbr)}
+                            playerId={line.player.id}
+                            onOpenPlayer={onOpenPlayer}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </span>
+                      {/* What they cost, beside what they are worth. The name
+                          gives up room for it rather than the tile. */}
+                      {line.player && showSalary ? (
+                        <span className="rg-sal">{formatMoneyShort(line.salary)}</span>
+                      ) : null}
                     </span>
                     <span className={`rg-pts rg-pts--${phase}`}>
                       {phase === 'pre' && line.player ? (

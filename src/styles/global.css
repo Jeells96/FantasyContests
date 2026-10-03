@@ -103,7 +103,8 @@ h4 {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  /* Opaque for the same reason as the footer: see .salarybar. */
+  /* Opaque so nothing shows through it as the page scrolls under. Its own
+     contents never change, so unlike the salary bar it can hold a layer. */
   background: #080c18;
   border-bottom: 1px solid var(--line-soft);
   transform: translateZ(0);
@@ -704,15 +705,19 @@ h4 {
   margin: 0 -16px;
   padding: 10px 16px calc(10px + var(--safe-bottom));
   /*
-   * Opaque, and on its own compositing layer. A translucent backdrop-filter
-   * behind a sticky bar whose numbers keep changing leaves stale pixels painted
-   * on iOS Safari, which shows up as figures overlapping each other until the
-   * page is scrolled and the layer is forced to repaint.
+   * Opaque, and deliberately NOT promoted to its own compositing layer.
+   *
+   * It used to be, to stop a translucent backdrop-filter leaving stale pixels.
+   * The backdrop-filter is long gone and the promotion outlived it, which made
+   * the opposite bug: `will-change: transform` tells the engine the layer moves
+   * but its contents do not, so iOS rasterises it once and keeps that texture.
+   * Everything in this bar is text that changes on every pick, so the roster
+   * count and the salary stayed painted at whatever they were when the page
+   * loaded — correct in the DOM, stale on the glass, until the app was closed
+   * and reopened. Painted with the page, the numbers change when they change.
    */
   background: #080c18;
   border-top: 1px solid var(--line);
-  transform: translateZ(0);
-  will-change: transform;
 }
 
 .salarybar__grid {
@@ -2512,3 +2517,13 @@ h4 {
   margin-top: 1px;
 }
 .feed--down .feed__change { color: var(--bad); }
+
+/*
+ * Belt and braces for the bar above.
+ *
+ * Not promoting the layer is the fix; this is in case something else promotes
+ * it anyway — an engine heuristic, or a later change that reaches for
+ * `will-change` again. One frame at a hair under full opacity is a paint the
+ * compositor cannot satisfy from a cached texture, and is invisible.
+ */
+.salarybar--repaint { opacity: 0.999; }

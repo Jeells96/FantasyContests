@@ -97,6 +97,9 @@ export function ContestBuilderPage() {
   const [defaults, setDefaults] = useState<ContestDefaults>(FALLBACK_DEFAULTS);
   const [people, setPeople] = useState<Record<string, Person>>({});
   const [invites, setInvites] = useState<ContestInvite[]>([]);
+  const [wagerOn, setWagerOn] = useState(false);
+  const [wagerAmount, setWagerAmount] = useState(5);
+  const [wagerNote, setWagerNote] = useState('');
 
   const selectedGames = useMemo(
     () => available.filter((game) => selectedIds.includes(game.id)),
@@ -161,6 +164,9 @@ export function ContestBuilderPage() {
         setName(contest.name);
         setNotes(contest.notes ?? '');
         setInvites(contest.invites ?? []);
+        setWagerOn(Boolean(contest.wager));
+        setWagerAmount(contest.wager?.amount ?? 5);
+        setWagerNote(contest.wager?.note ?? '');
         setDate(contest.lockTime.slice(0, 10));
         setLoaded(true);
       } catch (e) {
@@ -271,6 +277,13 @@ export function ContestBuilderPage() {
         ownerName: existing?.ownerName || identity?.displayName || '',
         invites,
         inviteKeys: invites.map((invite) => invite.key),
+        // Whoever shares a pool with the creator sees this without being named.
+        poolIds: people[myKey]?.pools ?? [],
+        // Always stated, so turning it off on an edit actually removes it.
+        wager:
+          wagerOn && wagerAmount > 0
+            ? { amount: wagerAmount, ...(wagerNote.trim() ? { note: wagerNote.trim() } : {}) }
+            : null,
         finalizedAt: null,
         playerCount: pricing.players.length,
         notes: notes.trim(),
@@ -573,6 +586,49 @@ export function ContestBuilderPage() {
                   <p className="tiny faint" style={{ margin: '6px 0 0' }}>
                     The captain scores {captainX}× points and costs {captainX}× salary. The salary cap below
                     already accounts for it.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="card">
+              <div className="section-title">
+                <h2 style={{ fontSize: 15 }}>Money on it</h2>
+              </div>
+              <Toggle
+                checked={wagerOn}
+                onChange={setWagerOn}
+                label="Play for a set amount"
+              />
+              {wagerOn ? (
+                <div className="stack" style={{ marginTop: 12 }}>
+                  <div className="field">
+                    <label htmlFor="wager">Amount each player puts in</label>
+                    <input
+                      id="wager"
+                      type="number"
+                      inputMode="decimal"
+                      className="input input--num"
+                      min={1}
+                      step={1}
+                      value={wagerAmount}
+                      onChange={(event) => setWagerAmount(Math.max(0, Number(event.target.value) || 0))}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="wagernote">Terms (optional)</label>
+                    <input
+                      id="wagernote"
+                      className="input"
+                      maxLength={80}
+                      placeholder="Winner takes all"
+                      value={wagerNote}
+                      onChange={(event) => setWagerNote(event.target.value)}
+                    />
+                  </div>
+                  <p className="tiny faint" style={{ margin: 0 }}>
+                    Everyone joining is asked whether they are in, and can play without betting. Nothing is
+                    collected here — the contest keeps the tally and ticks off who has settled up.
                   </p>
                 </div>
               ) : null}

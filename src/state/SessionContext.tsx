@@ -101,6 +101,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         device,
       );
       if (cancelled) return;
+      // Who they are is settled first and on its own. Gathering their other
+      // devices in is a separate, slower job, and making identity wait on it
+      // meant a phone on a bad connection gave up and played as itself — a
+      // stranger to its own contests.
+      setPersonUid(resolved);
+
       // Every device this name has ever been typed on, not just this one: a
       // phone that is never opened again would otherwise keep its contests,
       // its lineups and its place on the leaderboard to itself forever.
@@ -113,7 +119,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         markMerged(done);
       }
-      if (!cancelled) setPersonUid(resolved);
     };
 
     const settled = resolve().catch(() => undefined);
@@ -125,7 +130,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       if (!cancelled) setReady(true);
     });
-
     return () => {
       cancelled = true;
       clearTimeout(timer);

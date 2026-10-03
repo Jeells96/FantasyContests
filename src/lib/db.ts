@@ -10,6 +10,7 @@ import {
   limit,
   onSnapshot,
   query,
+  setDoc,
   where,
   serverTimestamp,
   Timestamp,
@@ -56,6 +57,9 @@ function contestFromDoc(id: string, data: DocumentData): Contest {
     ownerName: data.ownerName ?? undefined,
     members: Array.isArray(data.members) ? data.members : [],
     declinedBy: Array.isArray(data.declinedBy) ? data.declinedBy : [],
+    poolIds: Array.isArray(data.poolIds) ? data.poolIds : [],
+    wager: data.wager ?? undefined,
+    wagerPaid: Array.isArray(data.wagerPaid) ? data.wagerPaid : [],
     invites: Array.isArray(data.invites) ? data.invites : [],
     inviteKeys: Array.isArray(data.inviteKeys) ? data.inviteKeys : [],
     sports: data.sports ?? [],
@@ -173,6 +177,57 @@ export function listenMyInvitations(
       ),
     (error) => onError?.(error),
   );
+}
+
+/**
+ * Contests started by anyone sharing a pool with this person.
+ *
+ * Belonging to a pool is the invitation: a family game does not need its
+ * players named one at a time. Firestore takes at most thirty values in an
+ * `array-contains-any`, which is far more pools than anyone has.
+ */
+export function listenPoolContests(
+  poolIds: string[],
+  uid: string,
+  onChange: (contests: Contest[]) => void,
+  onError?: (e: Error) => void,
+): Unsubscribe {
+  if (poolIds.length === 0) {
+    onChange([]);
+    return () => undefined;
+  }
+  const q = query(collection(db, CONTESTS), where('poolIds', 'array-contains-any', poolIds.slice(0, 30)));
+  return onSnapshot(
+    q,
+    (snapshot) =>
+      onChange(
+        snapshot.docs
+          .map((d) => contestFromDoc(d.id, d.data()))
+          .filter((contest) => !contest.members.includes(uid))
+          .filter((contest) => !(contest.declinedBy ?? []).includes(uid))
+          .sort((a, b) => a.lockTime.localeCompare(b.lockTime)),
+      ),
+    (error) => onError?.(error),
+  );
+}
+
+/* ------------------------------------------------------------------ wager ---- */
+
+/** Record whether this entrant is in on the money, before they have a lineup. */
+export async function setWagerIn(contestId: string, uid: string, wagerIn: boolean): Promise<void> {
+  await setDoc(doc(db, CONTESTS, contestId, STANDINGS, uid), { wagerIn }, { merge: true });
+}
+
+/**
+ * Tick someone off as having paid, or untick them.
+ *
+ * Kept on the contest rather than on the payer's own record, because the person
+ * keeping track is the one who is owed.
+ */
+export async function setWagerPaid(contestId: string, uid: string, paid: boolean): Promise<void> {
+  await updateDoc(doc(db, CONTESTS, contestId), {
+    wagerPaid: paid ? arrayUnion(uid) : arrayRemove(uid),
+  });
 }
 
 export async function findContestByJoinCode(code: string): Promise<Contest | null> {
@@ -446,6 +501,8 @@ export interface SaveEntryInput {
   picks: Record<string, string>;
   salaryUsed: number;
   lockedSnapshot?: Entry['lockedSnapshot'];
+  /** Whether they are in on the contest's wager, when it has one. */
+  wagerIn?: boolean;
 }
 
 /** Write (or rewrite) the signed-in user's own entry plus its public record. */
@@ -472,6 +529,7 @@ export async function saveEntry(input: SaveEntryInput): Promise<void> {
     teamName: input.teamName,
     enteredAt: entry.submittedAt,
     submitted: true,
+    ...(input.wagerIn === undefined ? {} : { wagerIn: input.wagerIn }),
   };
 
   // One batch, so a user is never entered without appearing in the standings.

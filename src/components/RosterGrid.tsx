@@ -41,7 +41,10 @@ export function RosterGrid({
         >
           <div className="rg-head">
             <span className="rg-rank">{row.rank}</span>
-            <span className="rg-name">{row.teamName ?? row.displayName}</span>
+            <span className="rg-name">
+              {row.teamName ?? row.displayName}
+              {row.wagerIn ? <span className="wager-mark" title="In on the wager">💰</span> : null}
+            </span>
           </div>
 
           <div className="rg-total">{row.total.toFixed(1)}</div>

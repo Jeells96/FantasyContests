@@ -11,6 +11,7 @@ import {
   joinContest,
   listenMyContests,
   listenMyInvitations,
+  listenPoolContests,
 } from '../lib/db';
 import { hasSpread } from '../lib/engine/spread';
 import { deriveStatus, formatDateTime } from '../lib/engine/contestState';
@@ -18,6 +19,8 @@ import { useLiveContestsSync } from '../hooks/useLiveSync';
 import { rosterSummary } from '../lib/engine/roster';
 import { enteredContests } from '../lib/identity';
 import { useSession } from '../state/SessionContext';
+import { loadPeople } from '../lib/people';
+import { formatWager } from '../lib/engine/wager';
 import type { Contest, ContestStatus } from '../types';
 
 const ORDER: ContestStatus[] = ['live', 'open', 'complete'];
@@ -34,6 +37,8 @@ export function HomePage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [openPicks, setOpenPicks] = useState<Record<string, number>>({});
   const [invitations, setInvitations] = useState<Contest[]>([]);
+  const [poolContests, setPoolContests] = useState<Contest[]>([]);
+  const [myPools, setMyPools] = useState<string[]>([]);
   const [, setTick] = useState(0);
   const entered = useMemo(() => enteredContests(), []);
 
@@ -53,6 +58,27 @@ export function HomePage() {
     if (!personKey) return;
     return listenMyInvitations(personKey, uid, setInvitations);
   }, [personKey, uid]);
+
+  // Which circles this person belongs to; a contest from one is theirs to see.
+  useEffect(() => {
+    if (!personKey) return;
+    let cancelled = false;
+    void loadPeople().then((people) => {
+      if (!cancelled) setMyPools(people[personKey]?.pools ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [personKey]);
+
+  // Anything started by someone who shares a pool, without anyone being named.
+  useEffect(() => {
+    if (myPools.length === 0) {
+      setPoolContests([]);
+      return;
+    }
+    return listenPoolContests(myPools, uid, setPoolContests, () => undefined);
+  }, [myPools, uid]);
 
   // The list is the other page people leave open, so it keeps live contests
   // scoring rather than leaving that to whoever has a contest page up.
@@ -102,6 +128,17 @@ export function HomePage() {
     };
   }, [contests, uid]);
 
+  /*
+   * Everything this person could join but has not: named invitations and
+   * anything from a pool they are in. The same contest can arrive both ways, so
+   * it is listed once.
+   */
+  const waiting = useMemo(() => {
+    const byId = new Map<string, Contest>();
+    for (const contest of [...invitations, ...poolContests]) byId.set(contest.id, contest);
+    return [...byId.values()].sort((a, b) => a.lockTime.localeCompare(b.lockTime));
+  }, [invitations, poolContests]);
+
   const grouped = useMemo(() => {
     const map = new Map<ContestStatus, Contest[]>();
     for (const contest of contests ?? []) {
@@ -140,15 +177,15 @@ export function HomePage() {
 
         <JoinByCode uid={uid} known={contests} />
 
-        {invitations.length > 0 ? (
+        {waiting.length > 0 ? (
           <section>
             <div className="section-title">
-              <h2>You're invited</h2>
-              <span className="tiny faint">{invitations.length}</span>
+              <h2>Open to you</h2>
+              <span className="tiny faint">{waiting.length}</span>
             </div>
             <div className="list">
-              {invitations.map((contest) => (
-                <Invitation key={contest.id} contest={contest} uid={uid} />
+              {waiting.map((contest) => (
+                <Invitation key={contest.id} contest={contest} uid={uid} myKey={personKey} />
               ))}
             </div>
           </section>
@@ -266,16 +303,26 @@ function JoinByCode({ uid, known }: { uid: string; known: Contest[] | null }) {
 }
 
 /** A contest waiting for this name, joinable without a code. */
-function Invitation({ contest, uid }: { contest: Contest; uid: string }) {
+function Invitation({ contest, uid, myKey }: { contest: Contest; uid: string; myKey: string }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+  // Named personally, or simply in the same circle. Saying "invited you" for a
+  // contest nobody invited them to is a small lie that reads as a bug.
+  const named = Boolean(myKey && (contest.inviteKeys ?? []).includes(myKey));
 
   return (
     <div className="card card--tight row row--between" style={{ gap: 10 }}>
       <span style={{ minWidth: 0 }}>
         <span style={{ fontWeight: 800, display: 'block' }}>{contest.name}</span>
         <span className="tiny faint">
-          {contest.ownerName ? `${contest.ownerName} invited you` : 'You have been invited'} ·{' '}
+          {named
+            ? contest.ownerName
+              ? `${contest.ownerName} invited you`
+              : 'You have been invited'
+            : contest.ownerName
+              ? `${contest.ownerName} started this`
+              : 'Open to your pool'}
+          {contest.wager ? ` · ${formatWager(contest.wager.amount)} a player` : ''} ·{' '}
           {rosterSummary(contest.rosterSlots)} · locks {formatDateTime(contest.lockTime)}
         </span>
       </span>

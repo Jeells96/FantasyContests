@@ -244,6 +244,19 @@ export interface ScoringLogEntry {
   at: string;
 }
 
+/**
+ * Money on the contest.
+ *
+ * The app never moves any: it records what was agreed, who agreed to it, and
+ * who has settled up, which is the part people actually lose track of.
+ */
+export interface WagerConfig {
+  /** What each player puts in, in whole currency units. */
+  amount: number;
+  /** Free text from the creator, e.g. "winner takes all". */
+  note?: string;
+}
+
 export interface ContestInvite {
   /** Normalized first and last name; see lib/people.ts. */
   key: string;
@@ -272,6 +285,17 @@ export interface Contest {
   inviteKeys?: string[];
   /** Who turned the invitation down. Kept so it stays turned down everywhere. */
   declinedBy?: string[];
+  /**
+   * The pools the creator belonged to when they started it.
+   *
+   * A pool is a circle of people who already know each other, so a contest one
+   * of them starts is one the rest should simply see — nobody should have to be
+   * named for a family game. Stored on the contest so each person can find it
+   * from the pools they are in.
+   */
+  poolIds?: string[];
+  /** What is riding on it, when the creator set a price. Null once removed. */
+  wager?: WagerConfig | null;
   sports: Sport[];
   games: ContestGame[];
   rosterSlots: RosterSlot[];
@@ -294,6 +318,11 @@ export interface Contest {
   lastSyncAt?: string | null;
   /** When a tab last looked for lines that had not posted at creation. */
   lastSpreadCheckAt?: string | null;
+  /**
+   * Who has settled up, by entrant id. Ticked off by whoever is owed, so the
+   * list survives the conversation it came from.
+   */
+  wagerPaid?: string[];
   /** Newest first, capped; the contest's scoring feed. */
   scoringLog?: ScoringLogEntry[];
   results?: ContestResultsEntry[];
@@ -335,6 +364,8 @@ export interface Standing {
   teamName?: string;
   enteredAt: string;
   submitted: boolean;
+  /** Whether they took the contest's wager. Absent means they were never asked. */
+  wagerIn?: boolean;
 }
 
 export interface LeaderboardPlayerLine {
@@ -363,6 +394,8 @@ export interface LeaderboardRow {
   /** Null until the contest locks and rosters become public. */
   lines: LeaderboardPlayerLine[] | null;
   picks: Record<string, string> | null;
+  /** They took the contest's wager; shown beside their name. */
+  wagerIn?: boolean;
   /** Populated when the submitted lineup breaks the contest's own rules. */
   violations: string[];
   isSelf: boolean;

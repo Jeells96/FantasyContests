@@ -70,6 +70,8 @@ export function LeaderboardList({
               <span style={{ minWidth: 0 }}>
                 <span className="lb-name">
                   {row.teamName ?? row.displayName}
+                  {/* They put money on it. */}
+                  {row.wagerIn ? <span className="wager-mark" title="In on the wager">💰</span> : null}
                   {row.isSelf ? <span className="tiny muted"> · you</span> : null}
                 </span>
                 {row.teamName ? <span className="lb-sub">{row.displayName}</span> : null}

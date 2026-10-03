@@ -7,12 +7,14 @@
  * a start time that moved after the contest was built.
  */
 import { applyLiveResults } from '../src/lib/engine/liveSync';
+import { buildLeaderboard } from '../src/lib/engine/leaderboard';
 import { deriveStatus } from '../src/lib/engine/contestState';
 import type { Contest, ContestGame } from '../src/types';
 import type { LiveGameStats } from '../src/lib/providers/types';
 import { gameStateFrom } from '../src/lib/providers/mlb';
 import { phaseOfGame, phaseOfPlayer, phasesByGame } from '../src/lib/engine/phase';
 import { ownershipOf } from '../src/lib/engine/ownership';
+import { formatWager, potFor } from '../src/lib/engine/wager';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -32,6 +34,8 @@ const contestOf = (games: ContestGame[], lockTime: string): Contest =>
   ({
     id: 'c', games, lockTime, rosterSlots: [], scoring: {},
     normalization: {}, salaryCapInfo: { cap: 0 }, scoringLog: [],
+    gameWinner: { enabled: false, bonusPercent: 0, bonusPoints: 0 },
+    captain: { enabled: false, multiplier: 1.5 },
   }) as unknown as Contest;
 
 const live = (gameId: string, state: LiveGameStats['state'], extra: Partial<LiveGameStats> = {}): LiveGameStats => ({
@@ -139,6 +143,35 @@ check('an unknown game reads as not started', phaseOfGame(undefined), 'pre');
   const line = (id: string) => ({ player: { id } }) as never;
   const own = ownershipOf([{ lines: [line('a'), line('a')] }] as never);
   check('a player used twice counts once', own.byPlayer.get('a'), 1);
+}
+
+/* Money on a contest. */
+check('a round stake reads plainly', formatWager(5), '$5');
+check('a thousand keeps its comma', formatWager(1000), '$1,000');
+check('an odd amount keeps its cents', formatWager(2.5), '$2.50');
+check('the winner collects from everyone else', potFor(5, 4), 15);
+check('nobody else betting is nothing to collect', potFor(5, 1), 0);
+check('a wager nobody took pays nothing', potFor(5, 0), 0);
+
+/* The money mark follows the standing, not the entry. */
+{
+  const contest = contestOf([game('1', 'post', iso(-2))], iso(-2));
+  const rows = buildLeaderboard({
+    contest,
+    standings: [
+      { uid: 'a', displayName: 'A One', enteredAt: iso(-3), submitted: true, wagerIn: true },
+      { uid: 'b', displayName: 'B Two', enteredAt: iso(-3), submitted: true, wagerIn: false },
+      { uid: 'c', displayName: 'C Three', enteredAt: iso(-3), submitted: true },
+    ] as never,
+    entries: [],
+    players: new Map(),
+    selfUid: null,
+    locked: true,
+  });
+  const by = new Map(rows.map((r) => [r.uid, r.wagerIn]));
+  check('someone who took the bet is marked', by.get('a'), true);
+  check('someone who declined is not', by.get('b'), false);
+  check('someone never asked is not', by.get('c'), false);
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

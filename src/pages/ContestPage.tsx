@@ -5,10 +5,12 @@ import { LeaderboardList } from '../components/LeaderboardList';
 import { PlayerCard } from '../components/PlayerCard';
 import { PlayerSheet } from '../components/PlayerSheet';
 import { RosterPanel } from '../components/RosterPanel';
+import { WagerPrompt, WagerSettlement } from '../components/Wager';
+import { setWagerIn as saveWagerIn, setWagerPaid } from '../lib/db';
 import { phasesByGame } from '../lib/engine/phase';
 import { SalaryBar } from '../components/SalaryBar';
 import { ScoreOverlay } from '../components/ScoreOverlay';
-import { Banner, Empty, KeyValue, Spinner, SportPill, StatusPill } from '../components/ui';
+import { Banner, Empty, KeyValue, Spinner, SportPill, StatusPill, Toast } from '../components/ui';
 import { useContestData } from '../hooks/useContestData';
 import { useScoringEvents } from '../hooks/useScoringEvents';
 import { usePointDeltas } from '../hooks/usePointDeltas';
@@ -48,6 +50,22 @@ export function ContestPage() {
   const [sortKey, setSortKey] = useState<SortKey>('salary');
   const [detail, setDetail] = useState<ContestPlayer | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  /*
+   * The answer to a tap, as opposed to the state of the page.
+   *
+   * Refusing a tap used to be written into the banner at the top of the page,
+   * which someone building a lineup has long since scrolled past — so the
+   * button they pressed simply looked dead. This floats over whatever they are
+   * looking at and clears itself.
+   */
+  const [toast, setToast] = useState<{ tone: 'ok' | 'bad' | 'warn'; text: string } | null>(null);
+  /** Whether this person is in on the money. Null until they have said. */
+  const [wagerIn, setWagerIn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [teamName, setTeamName] = useState<string>('');
@@ -128,6 +146,12 @@ export function ContestPage() {
   // can say whether it is a projection, a score so far, or a final one.
   const phases = useMemo(() => (contest ? phasesByGame(contest) : new Map()), [contest]);
 
+  const myStanding = useMemo(() => standings.find((row) => row.uid === uid), [standings, uid]);
+  // Their recorded answer wins over anything typed in this tab.
+  useEffect(() => {
+    if (myStanding?.wagerIn !== undefined) setWagerIn(myStanding.wagerIn);
+  }, [myStanding?.wagerIn]);
+
   const rosterComplete = Boolean(validation && validation.filledSlots === contest?.rosterSlots.length);
   // A game with no posted line cannot be picked, so it cannot hold up a lineup.
   const pickableGames = useMemo(
@@ -203,7 +227,7 @@ export function ContestPage() {
             (slot) => isEligible(player, slot) && !lineup.some((line) => line.slotId === slot.id),
           );
     if (!target) {
-      setMessage({ tone: 'bad', text: `No open roster spot for ${player.position}. Tap a spot to replace it.` });
+      setToast({ tone: 'bad', text: `No open roster spot for ${player.position}. Tap a spot to replace it.` });
       return;
     }
 
@@ -215,7 +239,7 @@ export function ContestPage() {
       : 0;
     const available = cap - salaryUsed + refund;
     if (player.salary > available) {
-      setMessage({
+      setToast({
         tone: 'bad',
         text: `${player.name} costs ${formatMoney(player.salary)} and you have ${formatMoney(
           available,
@@ -240,16 +264,23 @@ export function ContestPage() {
     const cost = captainPremium(player, capMultiplier) - released;
 
     if (cost > cap - salaryUsed) {
-      setMessage({
+      // Naming someone who could go is more use than saying there is no room.
+      const short = cost - (cap - salaryUsed);
+      const candidate = lineup
+        .filter((line) => line.slotId !== slotId)
+        .map((line) => playersById.get(line.playerId))
+        .filter((entry): entry is ContestPlayer => Boolean(entry) && entry!.salary >= short)
+        .sort((a, b) => a.salary - b.salary)[0];
+      setToast({
         tone: 'bad',
-        text: `Making ${player.name} captain costs another ${formatMoney(
-          cost,
-        )} and you have ${formatMoney(cap - salaryUsed)} left. Drop someone first.`,
+        text: `Captaining ${player.name} costs ${formatMoney(cost)} more and you have ${formatMoney(
+          cap - salaryUsed,
+        )} left.${candidate ? ` Drop ${candidate.name} (${formatMoney(candidate.salary)}) to make room.` : ' Drop someone first.'}`,
       });
       return;
     }
 
-    setMessage(null);
+    setToast(null);
     setLineup((current) => current.map((line) => ({ ...line, captain: line.slotId === slotId })));
   }
 
@@ -290,6 +321,7 @@ export function ContestPage() {
         lineup,
         picks,
         salaryUsed: validation.salaryUsed,
+        ...(contest.wager ? { wagerIn: wagerIn === true } : {}),
         teamName: teamName || undefined,
         lockedSnapshot: Object.fromEntries(
           lineup.map((line) => [
@@ -416,6 +448,7 @@ export function ContestPage() {
         </div>
 
         {message ? <Banner tone={message.tone === 'ok' ? 'ok' : 'bad'}>{message.text}</Banner> : null}
+        {toast ? <Toast tone={toast.tone}>{toast.text}</Toast> : null}
 
         {!locked && openPicks > 0 && Boolean(myEntry) ? (
           <div className="banner banner--warn row row--between" style={{ gap: 10 }}>
@@ -440,6 +473,20 @@ export function ContestPage() {
               Go to picks
             </button>
           </div>
+        ) : null}
+
+        {tab === 'lineup' && contest.wager ? (
+          <WagerPrompt
+            contest={contest}
+            answer={wagerIn}
+            locked={locked}
+            onAnswer={(value) => {
+              setWagerIn(value);
+              // Written straight away once they are an entrant; otherwise it
+              // rides along with the lineup they are about to submit.
+              if (myEntry) void saveWagerIn(contest.id, uid, value).catch(() => undefined);
+            }}
+          />
         ) : null}
 
         {tab === 'lineup' ? (
@@ -631,13 +678,26 @@ export function ContestPage() {
         ) : null}
 
         {tab === 'board' ? (
-          <LeaderboardList
-            rows={leaderboard}
-            contest={contest}
-            locked={locked}
-            pointDeltas={pointDeltas}
-            onOpenPlayer={openPlayer}
-          />
+          <>
+            {status === 'complete' ? (
+              <WagerSettlement
+                contest={contest}
+                rows={leaderboard}
+                standings={standings}
+                uid={uid}
+                onTogglePaid={(payer, paid) =>
+                  void setWagerPaid(contest.id, payer, paid).catch(() => undefined)
+                }
+              />
+            ) : null}
+            <LeaderboardList
+              rows={leaderboard}
+              contest={contest}
+              locked={locked}
+              pointDeltas={pointDeltas}
+              onOpenPlayer={openPlayer}
+            />
+          </>
         ) : null}
 
         {tab === 'scoring' ? (

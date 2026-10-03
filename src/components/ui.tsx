@@ -107,6 +107,23 @@ export function Banner({ tone, children }: { tone?: 'warn' | 'bad' | 'ok'; child
 }
 
 /**
+ * An answer to something the person just tapped, where they are looking.
+ *
+ * The page's banner sits at the top, which is fine for the state of the page
+ * and useless as a reply to a tap: someone far down the player list taps a
+ * button, the refusal is written three screens above them, and the button looks
+ * broken. This floats above the page instead, so the answer arrives wherever
+ * they happen to be.
+ */
+export function Toast({ tone, children }: { tone?: 'warn' | 'bad' | 'ok'; children: ReactNode }) {
+  return (
+    <div className="toast-wrap" role="status" aria-live="polite">
+      <div className={`toast${tone ? ` toast--${tone}` : ''}`}>{children}</div>
+    </div>
+  );
+}
+
+/**
  * Points a player just gained or lost. Green up, red down; nothing at all when
  * the number is zero.
  */

@@ -40,6 +40,7 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
   const slotById = new Map(contest.rosterSlots.map((slot) => [slot.id, slot]));
 
   const nameByUid = new Map(standings.map((s) => [s.uid, s.displayName]));
+  const bettingByUid = new Map(standings.map((s) => [s.uid, s.wagerIn === true]));
   const nameOf = (uid: string): string => entriesByUid.get(uid)?.displayName ?? nameByUid.get(uid) ?? '';
   const uids = collapseByPerson(
     [...new Set<string>([...standings.map((s) => s.uid), ...entriesByUid.keys()])],
@@ -91,6 +92,7 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
       if (canSeeRoster) lines = captainFirst(built);
     }
 
+    const wagerIn = bettingByUid.get(uid) === true;
     const { correct, decided, total } = scorePicks(contest, entry);
     const bonusPoints = round2(correct * (contest.gameWinner.enabled ? contest.gameWinner.bonusPoints : 0));
 
@@ -98,6 +100,7 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
       uid,
       displayName,
       teamName: entry?.teamName ?? standings.find((s) => s.uid === uid)?.teamName,
+      wagerIn,
       rank: 0,
       fantasyPoints: round2(fantasyPoints),
       bonusPoints,

@@ -14,6 +14,7 @@ import type { LiveGameStats } from '../src/lib/providers/types';
 import { gameStateFrom } from '../src/lib/providers/mlb';
 import { phaseOfGame, phaseOfPlayer, phasesByGame } from '../src/lib/engine/phase';
 import { ownershipOf } from '../src/lib/engine/ownership';
+import { pickOpen } from '../src/lib/engine/spread';
 import { formatWager, potFor } from '../src/lib/engine/wager';
 import { computeRawFantasyPoints, DEFAULT_MLB_SCORING } from '../src/lib/scoring';
 import { describeStatChange } from '../src/lib/stats';
@@ -221,6 +222,17 @@ check('a wager nobody took pays nothing', potFor(5, 0), 0);
   // The box score carries plenty the contest does not pay for.
   check('unscored stats are not described', say({ ab: 0 }, { ab: 4 }), '');
   check('a stat going down is marked as such', say({ hr: 2 }, { hr: 1 }), '−1 home run');
+}
+
+/* A pick closes with its own game, not with the contest. */
+{
+  const at = (hours: number) => game('g', 'pre', iso(hours));
+  check('a game still to come is open', pickOpen(at(5)), true);
+  check('a game whose time has passed is not', pickOpen(at(-1)), false);
+  check('a game under way is not', pickOpen(game('g', 'in', iso(5))), false);
+  check('a finished game is not', pickOpen(game('g', 'post', iso(-5))), false);
+  // The contest locking is beside the point: this one starts tomorrow.
+  check('locking the contest does not close a later game', pickOpen(at(26)), true);
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

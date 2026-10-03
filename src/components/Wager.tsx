@@ -13,14 +13,18 @@ export function WagerPrompt({
   answer,
   onAnswer,
   locked,
+  bettors,
 }: {
   contest: Contest;
   answer: boolean | null;
   onAnswer: (value: boolean) => void;
   locked: boolean;
+  /** How many people are in so far, this person's own answer included. */
+  bettors: number;
 }) {
   if (!contest.wager) return null;
   const amount = formatWager(contest.wager.amount);
+  const pot = formatWager(contest.wager.amount * bettors);
 
   return (
     <div className={`card wager-card${answer === null ? ' wager-card--asking' : ''}`}>
@@ -28,8 +32,18 @@ export function WagerPrompt({
         <span style={{ minWidth: 0 }}>
           <span className="eyebrow">Money on it</span>
           <div style={{ fontWeight: 800, fontSize: 15 }}>
-            {amount} a player
+            {amount} per person
             {contest.wager.note ? <span className="tiny faint"> · {contest.wager.note}</span> : null}
+          </div>
+          {/* What is actually on the table, which is the number people want. */}
+          <div className="wager-pot">
+            {bettors > 0 ? (
+              <>
+                <strong>{pot}</strong> pot · {bettors} {bettors === 1 ? 'person' : 'people'} in
+              </>
+            ) : (
+              'Nobody is in yet.'
+            )}
           </div>
           <p className="tiny faint" style={{ margin: '4px 0 0' }}>
             {answer === null

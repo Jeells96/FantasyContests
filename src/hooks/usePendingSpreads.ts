@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { getContest, patchContest } from '../lib/db';
 import { deriveStatus } from '../lib/engine/contestState';
-import { hasSpread } from '../lib/engine/spread';
+import { hasSpread, pickOpen } from '../lib/engine/spread';
 import { withSpreads } from '../lib/providers/odds';
 import type { Contest } from '../types';
 
@@ -19,9 +19,14 @@ const FRESH_MS = 150_000;
 export async function pullMissingSpreads(contestId: string): Promise<number> {
   const fresh = await getContest(contestId);
   if (!fresh) throw new Error('That contest no longer exists.');
-  if (deriveStatus(fresh) !== 'open') throw new Error('This contest has already started.');
+  if (deriveStatus(fresh) === 'complete') throw new Error('This contest is over.');
 
-  const pending = fresh.games.filter((game) => !hasSpread(game));
+  /*
+   * Only games that can still be picked, which is not the same as the contest
+   * being open. A contest locks when its first game starts; a game tomorrow is
+   * still to come, and a line that posts for it is still worth fetching.
+   */
+  const pending = fresh.games.filter((game) => !hasSpread(game) && pickOpen(game));
   if (pending.length === 0) return 0;
 
   const filled = await withSpreads(pending);
@@ -44,13 +49,16 @@ export async function pullMissingSpreads(contestId: string): Promise<number> {
  *
  * A line is frozen the moment it is captured, exactly as before — this only
  * fills in the games that had no line to freeze yet. Games that already carry
- * one are never touched, and the check stops once every game has a line or the
- * contest locks.
+ * one are never touched, and the check stops once every game that can still be
+ * picked has a line. It keeps running past the contest's own lock, because a
+ * game that has not started is still a game to be called.
  */
 export function usePendingSpreads(contest: Contest | null, enabled: boolean): void {
   const running = useRef(false);
   const contestId = contest?.id ?? null;
-  const missing = Boolean(contest?.gameWinner.enabled) && (contest?.games ?? []).some((game) => !hasSpread(game));
+  const missing =
+    Boolean(contest?.gameWinner.enabled) &&
+    (contest?.games ?? []).some((game) => !hasSpread(game) && pickOpen(game));
 
   useEffect(() => {
     if (!enabled || !contestId || !missing) return;
@@ -61,8 +69,8 @@ export function usePendingSpreads(contest: Contest | null, enabled: boolean): vo
       running.current = true;
       try {
         const fresh = await getContest(contestId!);
-        if (!fresh || deriveStatus(fresh) !== 'open') return;
-        const pending = fresh.games.filter((game) => !hasSpread(game));
+        if (!fresh || deriveStatus(fresh) === 'complete') return;
+        const pending = fresh.games.filter((game) => !hasSpread(game) && pickOpen(game));
         if (pending.length === 0) return;
 
         const last = Date.parse(fresh.lastSpreadCheckAt ?? '');

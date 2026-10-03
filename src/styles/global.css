@@ -2527,3 +2527,15 @@ h4 {
  * compositor cannot satisfy from a cached texture, and is invisible.
  */
 .salarybar--repaint { opacity: 0.999; }
+
+/* A field that has just been answered wrong. */
+.input--bad { border-color: var(--bad); }
+
+/* What is on the table, under the stake. */
+.wager-pot {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.wager-pot strong { color: var(--accent); font-weight: 900; }

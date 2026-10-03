@@ -6,7 +6,7 @@ import { PlayerCard } from '../components/PlayerCard';
 import { PlayerSheet } from '../components/PlayerSheet';
 import { RosterPanel } from '../components/RosterPanel';
 import { WagerPrompt, WagerSettlement } from '../components/Wager';
-import { setWagerIn as saveWagerIn, setWagerPaid } from '../lib/db';
+import { setLatePick, setWagerIn as saveWagerIn, setWagerPaid } from '../lib/db';
 import { phasesByGame } from '../lib/engine/phase';
 import { SalaryBar } from '../components/SalaryBar';
 import { ScoreOverlay } from '../components/ScoreOverlay';
@@ -23,7 +23,7 @@ import { joinContest, saveEntry } from '../lib/db';
 import { formatCountdown, formatDateTime, formatGameTime } from '../lib/engine/contestState';
 import { buildLeaderboard } from '../lib/engine/leaderboard';
 import { formatMoney, validateEntry } from '../lib/engine/lineup';
-import { hasSpread } from '../lib/engine/spread';
+import { hasSpread, pickOpen } from '../lib/engine/spread';
 import { isEligible, rosterSummary } from '../lib/engine/roster';
 import { markEntered, teamNameFor } from '../lib/identity';
 import { generateTeamName } from '../lib/teamName';
@@ -64,6 +64,15 @@ export function ContestPage() {
   const [toast, setToast] = useState<{ tone: 'ok' | 'bad' | 'warn'; text: string } | null>(null);
   /** Whether this person is in on the money. Null until they have said. */
   const [wagerIn, setWagerIn] = useState<boolean | null>(null);
+  /** Picks made since the contest locked, shown before Firestore echoes them. */
+  const [latePicks, setLatePicks] = useState<Record<string, string>>({});
+  // A pick closes when its own game starts, which is a moment that arrives
+  // while the page is open; this re-reads the clock so it closes on time.
+  const [clock, setClock] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock((value) => value + 1), 20_000);
+    return () => window.clearInterval(timer);
+  }, []);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 4500);
@@ -120,7 +129,8 @@ export function ContestPage() {
   const { events } = useScoringEvents(contest, players, myPlayerIds, locked && status !== 'complete');
   // Anyone watching a live contest keeps its scores moving.
   const liveSync = useLiveSync(contest, status === 'live');
-  usePendingSpreads(contest, status === 'open');
+  // Runs while anything is still to be called, which outlasts the lock.
+  usePendingSpreads(contest, status !== 'complete');
   const copyable = useCopyableLineups(contest, uid, !locked && tab === 'lineup');
 
   /**
@@ -200,6 +210,39 @@ export function ContestPage() {
     [contest],
   );
   const openPicks = pickableGames.filter((game) => !picks[game.id]).length;
+
+  /*
+   * Picks outlive the contest's lock.
+   *
+   * The roster freezes when the first game starts, because every player in it
+   * is about to be in play. A pick on a game that starts tomorrow is not, so it
+   * stays open until that game does.
+   */
+  const effectivePicks = useMemo(
+    () => ({ ...(myEntry?.picks ?? {}), ...(myStanding?.picks ?? {}), ...latePicks }),
+    [myEntry?.picks, myStanding?.picks, latePicks],
+  );
+  /** Games still pickable: not started, whatever the contest's own lock says. */
+  const stillOpen = useMemo(
+    () => (contest?.gameWinner.enabled ? contest.games.filter((game) => pickOpen(game)) : []),
+    [contest, clock],
+  );
+  const unpicked = stillOpen.filter((game) => !effectivePicks[game.id]);
+  const unpickedWithLine = unpicked.filter(hasSpread);
+  const hasEntry = Boolean(myEntry);
+  /** Late picking only matters once the entry itself is frozen. */
+  const latePicksOpen = locked && hasEntry && stillOpen.length > 0;
+
+  /*
+   * How many are in on the money. Counted from the public standings, with this
+   * person's own answer taken from whatever they have just tapped — the written
+   * record can be a moment behind, and the pot should not lag their own choice.
+   */
+  const bettors = useMemo(() => {
+    const others = standings.filter((row) => row.uid !== uid && row.wagerIn === true).length;
+    const mine = wagerIn === null ? myStanding?.wagerIn === true : wagerIn;
+    return others + (mine ? 1 : 0);
+  }, [standings, uid, wagerIn, myStanding?.wagerIn]);
   /** Roster rules only — the picks and the wager are later steps. */
   const isPickError = (error: string) => /^Pick a winner|^Invalid winner/.test(error);
   const rosterReady = Boolean(
@@ -527,26 +570,65 @@ export function ContestPage() {
         {message ? <Banner tone={message.tone === 'ok' ? 'ok' : 'bad'}>{message.text}</Banner> : null}
         {toast ? <Toast tone={toast.tone}>{toast.text}</Toast> : null}
 
-        {!locked && openPicks > 0 && Boolean(myEntry) ? (
+        {/*
+          * Every game still to be called, whether or not its line has posted —
+          * a game nobody can pick yet is still a game they have not picked, and
+          * the contest page is where they will notice.
+          */}
+        {hasEntry && unpicked.length > 0 ? (
           <div className="banner banner--warn row row--between" style={{ gap: 10 }}>
             <span style={{ minWidth: 0 }}>
               <strong>
-                {openPicks} spread {openPicks === 1 ? 'pick is' : 'picks are'} waiting.
+                {unpicked.length} game{unpicked.length === 1 ? '' : 's'} still to call.
               </strong>{' '}
-              The line has posted since you submitted. Make the pick and update to claim the bonus.
+              {unpickedWithLine.length === 0
+                ? `No line has posted ${unpicked.length === 1 ? 'for it' : 'for them'} yet. They stay open until each game starts.`
+                : unpickedWithLine.length === unpicked.length
+                  ? 'Make the pick to claim the bonus.'
+                  : `${unpickedWithLine.length} can be picked now; the rest are waiting on a line.`}
             </span>
             <button
               type="button"
               className="btn btn--sm btn--primary"
               onClick={() => {
-                // Straight to the picker, which is now a step of its own
-                // rather than somewhere further down the same page.
                 setTab('lineup');
                 setEntryStep('picks');
+                // Locked contests show the picker as its own card instead.
+                window.setTimeout(
+                  () => picksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                  60,
+                );
               }}
             >
               Go to picks
             </button>
+          </div>
+        ) : null}
+
+        {tab === 'lineup' && latePicksOpen ? (
+          <div className="card" ref={picksRef}>
+            <div className="section-title">
+              <h2 style={{ fontSize: 15 }}>Still to call</h2>
+              <span className="tiny faint">
+                {stillOpen.length - unpicked.length}/{stillOpen.length} picked
+              </span>
+            </div>
+            <p className="tiny muted" style={{ margin: '0 0 10px' }}>
+              Your roster locked when the first game started, but a pick stays open until its own game does.
+              These save as you make them.
+            </p>
+            <GamePicks
+              games={stillOpen}
+              picks={effectivePicks}
+              contestId={contest.id}
+              bonusPoints={contest.gameWinner.bonusPoints}
+              onPick={(gameId, teamId) => {
+                setLatePicks((current) => ({ ...current, [gameId]: teamId }));
+                void setLatePick(contest.id, uid, gameId, teamId).catch(() =>
+                  setToast({ tone: 'bad', text: 'Could not save that pick. Try again.' }),
+                );
+              }}
+            />
           </div>
         ) : null}
 
@@ -556,7 +638,7 @@ export function ContestPage() {
               contest={contest}
               playersById={playersById}
               lineup={myEntry?.lineup ?? []}
-              picks={myEntry?.picks ?? {}}
+              picks={effectivePicks}
               hasEntry={Boolean(myEntry)}
               points={myRow?.total ?? 0}
               bonus={myRow?.bonusPoints ?? 0}
@@ -745,6 +827,7 @@ export function ContestPage() {
                     contest={contest}
                     answer={wagerIn}
                     locked={locked}
+                    bettors={bettors}
                     onAnswer={(value) => {
                       setWagerIn(value);
                       // Written straight away once they are an entrant; otherwise

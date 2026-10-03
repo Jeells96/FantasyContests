@@ -11,6 +11,20 @@ import type { ContestGame, ContestTeam } from '../../types';
 
 export type PickResult = 'covered' | 'missed' | 'push' | 'pending';
 
+/**
+ * A pick belongs to its own game, not to the slate.
+ *
+ * The contest locks when its first game starts, which is the right moment to
+ * freeze a roster — every player in it is about to be in play. A pick on
+ * Sunday's game is not: it stays open until Sunday's game starts, however long
+ * ago the contest locked.
+ */
+export function pickOpen(game: ContestGame, now: Date = new Date()): boolean {
+  if (game.state !== 'pre') return false;
+  const start = Date.parse(game.startTime);
+  return !Number.isFinite(start) || now.getTime() < start;
+}
+
 export function hasSpread(game: ContestGame): boolean {
   return Boolean(game.spread) && Number.isFinite(game.spread?.homeSpread);
 }

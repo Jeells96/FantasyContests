@@ -368,6 +368,17 @@ export interface Standing {
   submitted: boolean;
   /** Whether they took the contest's wager. Absent means they were never asked. */
   wagerIn?: boolean;
+  /**
+   * Picks made after the contest locked.
+   *
+   * A pick belongs to its own game, not to the slate: a Sunday game is still
+   * open on Sunday morning even though the contest locked on Saturday night.
+   * Entries freeze at lock and cannot be reopened without changing the security
+   * rules, so late picks live here, where writing is always allowed. They are
+   * only ever written after lock, when every entry is public anyway — before
+   * lock a pick stays on the entry, where nobody else can read it.
+   */
+  picks?: Record<string, string>;
 }
 
 export interface LeaderboardPlayerLine {

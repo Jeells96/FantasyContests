@@ -213,6 +213,26 @@ export function listenPoolContests(
 
 /* ------------------------------------------------------------------ wager ---- */
 
+/**
+ * Record a pick made after the contest locked.
+ *
+ * Kept on the public standing rather than the entry, which the rules freeze at
+ * lock. Only called once the contest has locked, so it never exposes a pick
+ * that was supposed to stay hidden.
+ */
+export async function setLatePick(
+  contestId: string,
+  uid: string,
+  gameId: string,
+  teamId: string,
+): Promise<void> {
+  await setDoc(
+    doc(db, CONTESTS, contestId, STANDINGS, uid),
+    { picks: { [gameId]: teamId } },
+    { merge: true },
+  );
+}
+
 /** Record whether this entrant is in on the money, before they have a lineup. */
 export async function setWagerIn(contestId: string, uid: string, wagerIn: boolean): Promise<void> {
   await setDoc(doc(db, CONTESTS, contestId, STANDINGS, uid), { wagerIn }, { merge: true });

@@ -41,6 +41,9 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
 
   const nameByUid = new Map(standings.map((s) => [s.uid, s.displayName]));
   const bettingByUid = new Map(standings.map((s) => [s.uid, s.wagerIn === true]));
+  // Picks made after lock live on the public standing, because the entry is
+  // frozen by then. A late pick is the one that counts for its game.
+  const latePicksByUid = new Map(standings.map((s) => [s.uid, s.picks ?? {}]));
   const nameOf = (uid: string): string => entriesByUid.get(uid)?.displayName ?? nameByUid.get(uid) ?? '';
   const uids = collapseByPerson(
     [...new Set<string>([...standings.map((s) => s.uid), ...entriesByUid.keys()])],
@@ -93,7 +96,8 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
     }
 
     const wagerIn = bettingByUid.get(uid) === true;
-    const { correct, decided, total } = scorePicks(contest, entry);
+    const picks = { ...(entry?.picks ?? {}), ...(latePicksByUid.get(uid) ?? {}) };
+    const { correct, decided, total } = scorePicks(contest, picks, Boolean(entry));
     const bonusPoints = round2(correct * (contest.gameWinner.enabled ? contest.gameWinner.bonusPoints : 0));
 
     rows.push({
@@ -110,7 +114,7 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
       totalPicks: total,
       salaryUsed,
       lines,
-      picks: canSeeRoster ? entry?.picks ?? null : null,
+      picks: canSeeRoster ? picks : null,
       violations,
       isSelf,
     });
@@ -141,14 +145,18 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
   return rows;
 }
 
-function scorePicks(contest: Contest, entry: Entry | undefined): { correct: number; decided: number; total: number } {
+function scorePicks(
+  contest: Contest,
+  picks: Record<string, string>,
+  entered: boolean,
+): { correct: number; decided: number; total: number } {
   const total = contest.gameWinner.enabled ? contest.games.length : 0;
-  if (!entry || !contest.gameWinner.enabled) return { correct: 0, decided: 0, total };
+  if (!entered || !contest.gameWinner.enabled) return { correct: 0, decided: 0, total };
   let correct = 0;
   let decided = 0;
   for (const game of contest.games) {
     if (game.state !== 'post') continue;
-    const result = gradePick(game, entry.picks?.[game.id]);
+    const result = gradePick(game, picks[game.id]);
     if (result === 'pending') continue;
     decided += 1;
     // A push pays nobody, so it counts as decided but not correct.

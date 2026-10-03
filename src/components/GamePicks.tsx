@@ -6,6 +6,7 @@ import {
   formatLine,
   gradePick,
   hasSpread,
+  pickOpen,
   requirementText,
   spreadFor,
 } from '../lib/engine/spread';
@@ -87,6 +88,9 @@ export function GamePicks({
                 const picked = pick === team.id;
                 const result = picked ? gradePick(game, team.id) : 'pending';
                 const final = game.state === 'post';
+                // This game's own start time is what closes it, not the
+                // contest's. A Sunday game is pickable on Sunday morning.
+                const open = pickOpen(game);
                 return (
                   <button
                     key={team.id}
@@ -94,7 +98,7 @@ export function GamePicks({
                     className={`pick${picked ? ' pick--picked' : ''}${
                       picked && final && result === 'covered' ? ' pick--won' : ''
                     }${picked && final && result === 'missed' ? ' pick--lost' : ''}`}
-                    disabled={readOnly || !onPick || !withLine}
+                    disabled={readOnly || !onPick || !withLine || !open}
                     onClick={() => onPick?.(game.id, team.id)}
                   >
                     <span className="pick__head">

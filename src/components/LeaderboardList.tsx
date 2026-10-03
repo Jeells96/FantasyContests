@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Contest, LeaderboardRow } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
-import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
+import { formatLine, gradePick, hasSpread, pickOpen, spreadFor } from '../lib/engine/spread';
 import { phaseOfPlayer, phasesByGame } from '../lib/engine/phase';
 import { DeltaBadge, Empty } from './ui';
 import { RosterGrid } from './RosterGrid';
@@ -187,6 +187,13 @@ export function LeaderboardList({
                             const result = gradePick(game, pick);
                             const final = game.state === 'post';
                             const side = team && team.id === game.home.id ? 'home' : 'away';
+                            if (!row.isSelf && pickOpen(game)) {
+                              return (
+                                <span key={game.id} className="pill pill--hidden" title="Hidden until the game starts">
+                                  🔒 {game.shortName}
+                                </span>
+                              );
+                            }
                             return (
                               <span
                                 key={game.id}

@@ -2539,3 +2539,10 @@ h4 {
   color: var(--text-muted);
 }
 .wager-pot strong { color: var(--accent); font-weight: 900; }
+
+/* Somebody else's pick, still under wraps until their game starts. */
+.rg-pick--hidden,
+.pill--hidden {
+  color: var(--text-faint);
+  border-style: dashed;
+}

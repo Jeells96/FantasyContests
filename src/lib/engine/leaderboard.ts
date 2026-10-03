@@ -10,7 +10,7 @@ import { validateLineup } from './lineup';
 import { captainEnabled, captainFirst, captainMultiplier, effectivePoints, effectiveSalary } from './captain';
 import { displayKey } from '../personKey';
 import { round2 } from './projections';
-import { gradePick } from './spread';
+import { gradePick, pickOpen } from './spread';
 
 export interface LeaderboardInput {
   contest: Contest;
@@ -44,6 +44,15 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
   // Picks made after lock live on the public standing, because the entry is
   // frozen by then. A late pick is the one that counts for its game.
   const latePicksByUid = new Map(standings.map((s) => [s.uid, s.picks ?? {}]));
+  /*
+   * A pick is nobody else's business until its game starts.
+   *
+   * Picks can now be made after the contest locks, so showing them the moment
+   * the slate locks would let a late picker read the room first. Each one stays
+   * covered until the game it is on is under way — by which point it cannot be
+   * changed either, so there is nothing left to gain from seeing it.
+   */
+  const started = new Map(contest.games.map((game) => [game.id, !pickOpen(game)]));
   const nameOf = (uid: string): string => entriesByUid.get(uid)?.displayName ?? nameByUid.get(uid) ?? '';
   const uids = collapseByPerson(
     [...new Set<string>([...standings.map((s) => s.uid), ...entriesByUid.keys()])],
@@ -114,7 +123,11 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardRow[] {
       totalPicks: total,
       salaryUsed,
       lines,
-      picks: canSeeRoster ? picks : null,
+      picks: canSeeRoster
+        ? isSelf
+          ? picks
+          : Object.fromEntries(Object.entries(picks).filter(([gameId]) => started.get(gameId)))
+        : null,
       violations,
       isSelf,
     });

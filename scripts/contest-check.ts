@@ -235,5 +235,35 @@ check('a wager nobody took pays nothing', potFor(5, 0), 0);
   check('locking the contest does not close a later game', pickOpen(at(26)), true);
 }
 
+/* A pick stays covered until its own game starts. */
+{
+  const games = [game('early', 'in', iso(-1)), game('later', 'pre', iso(6))];
+  const contest = contestOf(games, iso(-1));
+  (contest as unknown as { gameWinner: unknown }).gameWinner = {
+    enabled: true, bonusPercent: 0, bonusPoints: 5,
+  };
+  const entryFor = (uid: string) =>
+    ({ uid, displayName: `${uid} Person`, lineup: [], picks: { early: 'a', later: 'b' },
+       salaryUsed: 0, submittedAt: iso(-2), updatedAt: iso(-2) }) as never;
+  const rows = buildLeaderboard({
+    contest,
+    standings: [
+      { uid: 'me', displayName: 'Me Person', enteredAt: iso(-2), submitted: true },
+      { uid: 'them', displayName: 'Them Person', enteredAt: iso(-2), submitted: true },
+    ] as never,
+    entries: [entryFor('me'), entryFor('them')],
+    players: new Map(),
+    selfUid: 'me',
+    locked: true,
+  });
+  const mine = rows.find((r) => r.uid === 'me');
+  const theirs = rows.find((r) => r.uid === 'them');
+  check('you always see your own picks', Object.keys(mine?.picks ?? {}).sort(), ['early', 'later']);
+  check('a rival\'s pick shows once the game is under way', theirs?.picks?.early, 'a');
+  check('a rival\'s pick on a game still to come is withheld', theirs?.picks?.later, undefined);
+  // Withholding the pick must not withhold the score it earns.
+  check('their roster is still visible', theirs?.lines !== null, true);
+}
+
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

@@ -2,7 +2,7 @@ import type { Contest, LeaderboardRow } from '../types';
 import { formatMoney } from '../lib/engine/lineup';
 import { ownershipOf } from '../lib/engine/ownership';
 import { PlayerName } from './PlayerName';
-import { formatLine, gradePick, hasSpread, spreadFor } from '../lib/engine/spread';
+import { formatLine, gradePick, hasSpread, pickOpen, spreadFor } from '../lib/engine/spread';
 import { phaseOfPlayer, phasesByGame } from '../lib/engine/phase';
 
 /**
@@ -146,6 +146,16 @@ export function RosterGrid({
                 const result = gradePick(game, pick);
                 const final = game.state === 'post';
                 const side = team && team.id === game.home.id ? 'home' : 'away';
+                // Somebody else's pick on a game still to start is withheld, so
+                // an empty slot here is a secret rather than an omission.
+                const covered = !row.isSelf && pickOpen(game);
+                if (covered) {
+                  return (
+                    <span key={game.id} className="rg-pick rg-pick--hidden" title="Hidden until the game starts">
+                      🔒
+                    </span>
+                  );
+                }
                 return (
                   <span
                     key={game.id}

@@ -67,6 +67,10 @@ export const DEFAULT_MLB_SCORING: SportScoring = {
     hbp: 2,
     sb: 5,
     cs: -2,
+    // Striking out and booting a ball are the two ways a position player
+    // actively costs his side, so they cost him here too.
+    so: -1,
+    e: -2,
     pitchOuts: 0.75, // 2.25 points per full inning
     pitchSO: 2,
     pitchW: 4,

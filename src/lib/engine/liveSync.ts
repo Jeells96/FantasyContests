@@ -1,7 +1,7 @@
 import type { Contest, ContestGame, ContestPlayer, ScoringLogEntry } from '../../types';
 import type { GamePlay, LiveGameStats } from '../providers/types';
 import { computeRawFantasyPoints } from '../scoring';
-import { formatStatLine, hasActivity } from '../stats';
+import { describeStatChange, formatStatLine, hasActivity } from '../stats';
 import { normalizationFactor } from './normalization';
 import { deriveStatus, earliestStart } from './contestState';
 
@@ -81,6 +81,9 @@ export function applyLiveResults(
 
   // Compare against what the pool held before this round to build the feed.
   const previousPoints = new Map(pool.map((player) => [player.id, player.normalizedPoints ?? 0]));
+  // The stats as they stood before this round, so a change can be described
+  // rather than just counted.
+  const previousStats = new Map(pool.map((player) => [player.id, player.liveStats]));
   const situations = new Map(live.map((result) => [result.gameId, result.situation]));
   const playsByGame = new Map(live.map((result) => [result.gameId, result.plays ?? []]));
   const gamesById = new Map(games.map((game) => [game.id, game]));
@@ -124,6 +127,12 @@ export function applyLiveResults(
       delta,
       total: round2(after),
       statLine: player.statLine,
+      change: describeStatChange(
+        player.sport,
+        previousStats.get(player.id),
+        player.liveStats,
+        Object.keys(contest.scoring[player.sport]?.values ?? {}),
+      ),
       playId: play ? `${player.gameId}-${play.id}` : undefined,
       // Only a play this change was actually traced to gets to say where the
       // game stood. Borrowing the game's current down and clock for a change

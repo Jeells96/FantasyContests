@@ -15,6 +15,8 @@ import { gameStateFrom } from '../src/lib/providers/mlb';
 import { phaseOfGame, phaseOfPlayer, phasesByGame } from '../src/lib/engine/phase';
 import { ownershipOf } from '../src/lib/engine/ownership';
 import { formatWager, potFor } from '../src/lib/engine/wager';
+import { computeRawFantasyPoints, DEFAULT_MLB_SCORING } from '../src/lib/scoring';
+import { describeStatChange } from '../src/lib/stats';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -187,6 +189,38 @@ check('a wager nobody took pays nothing', potFor(5, 0), 0);
   // Picked in any order, since they are gathered over several searches.
   const shuffled = [span[2], span[0], span[1]];
   check('order picked does not matter', earliestStart(shuffled), '2026-10-04T17:00:00Z');
+}
+
+/* What a hitter does badly costs him. */
+{
+  const pts = (stats: Record<string, number>) => computeRawFantasyPoints(stats, DEFAULT_MLB_SCORING);
+  check('striking out costs the batter', pts({ ab: 1, so: 1 }), -1);
+  check('each strikeout costs again', pts({ ab: 4, so: 3 }), -3);
+  check('an error costs more than a strikeout', pts({ e: 1 }), -2);
+  check('they add up', pts({ so: 2, e: 1 }), -4);
+  // A good night is still a good night.
+  check('a home run outweighs a strikeout', pts({ h: 1, hr: 1, rbi: 1, r: 1, so: 1 }) > 0, true);
+  check('an error does not touch a pitcher\'s own line', pts({ pitchOuts: 3, pitchSO: 1 }), 4.25);
+}
+
+/* The feed says what happened, not just what it was worth. */
+{
+  const scored = Object.keys(DEFAULT_MLB_SCORING.values);
+  const say = (before: Record<string, number>, after: Record<string, number>) =>
+    describeStatChange('mlb', before, after, scored);
+  check('a strikeout is named', say({ so: 0 }, { so: 1 }), '+1 strikeout');
+  check('two are counted', say({ so: 1 }, { so: 3 }), '+2 strikeouts');
+  check('an error is named', say({ e: 0 }, { e: 1 }), '+1 error');
+  check(
+    'a home run names what came with it',
+    say({ hr: 0, rbi: 0, r: 0 }, { hr: 1, rbi: 2, r: 1 }),
+    '+2 RBI, +1 home run, +1 run',
+  );
+  check('an inning of pitching reads plainly', say({ pitchOuts: 0, pitchSO: 0 }, { pitchOuts: 3, pitchSO: 2 }), '+3 outs recorded, +2 strikeouts');
+  check('nothing moving says nothing', say({ hr: 1 }, { hr: 1 }), '');
+  // The box score carries plenty the contest does not pay for.
+  check('unscored stats are not described', say({ ab: 0 }, { ab: 4 }), '');
+  check('a stat going down is marked as such', say({ hr: 2 }, { hr: 1 }), '−1 home run');
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

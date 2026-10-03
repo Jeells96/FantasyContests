@@ -18,13 +18,15 @@ export interface StatMeta {
   negative?: boolean;
   /** Round to this many decimals when displaying. */
   decimals?: number;
+  /** Wording for the scoring feed, when the label does not pluralise cleanly. */
+  phrase?: string;
 }
 
 const meta = (
   key: string,
   label: string,
   short: string,
-  opts: { negative?: boolean; decimals?: number } = {},
+  opts: { negative?: boolean; decimals?: number; phrase?: string } = {},
 ): StatMeta => ({ key, label, short, ...opts });
 
 export const NFL_STATS: StatMeta[] = [
@@ -72,12 +74,13 @@ export const MLB_STATS: StatMeta[] = [
   meta('triples', 'Triples', '3B'),
   meta('hr', 'Home runs', 'HR'),
   meta('r', 'Runs', 'R'),
-  meta('rbi', 'Runs batted in', 'RBI'),
+  meta('rbi', 'Runs batted in', 'RBI', { phrase: 'RBI' }),
   meta('bb', 'Walks', 'BB'),
   meta('hbp', 'Hit by pitch', 'HBP'),
   meta('sb', 'Stolen bases', 'SB'),
   meta('cs', 'Caught stealing', 'CS', { negative: true }),
   meta('so', 'Strikeouts (batting)', 'K', { negative: true }),
+  meta('e', 'Errors', 'E', { negative: true }),
   // Pitching
   meta('pitchOuts', 'Outs recorded', 'OUT'),
   meta('pitchIP', 'Innings pitched', 'IP', { decimals: 1 }),
@@ -189,7 +192,7 @@ const LINE_KEYS: Record<Sport, Record<string, string[]>> = {
     P: ['pitchIP', 'pitchSO', 'pitchER', 'pitchH', 'pitchBB'],
     SP: ['pitchIP', 'pitchSO', 'pitchER', 'pitchH', 'pitchBB'],
     RP: ['pitchIP', 'pitchSO', 'pitchER', 'pitchH'],
-    default: ['h', 'ab', 'r', 'hr', 'rbi', 'bb', 'sb'],
+  default: ['h', 'ab', 'r', 'hr', 'rbi', 'bb', 'sb', 'so', 'e'],
   },
   nba: {
     default: ['pts', 'reb', 'ast', 'fg3m', 'stl', 'blk'],
@@ -216,4 +219,57 @@ export function formatStatLine(sport: Sport, position: string, stats: StatMap | 
 export function hasActivity(stats: StatMap | undefined): boolean {
   if (!stats) return false;
   return Object.values(stats).some((v) => typeof v === 'number' && v !== 0);
+}
+
+/**
+ * What changed, in words.
+ *
+ * A feed that says only "+8.5" leaves everyone guessing which of a dozen things
+ * a player just did. This names the stats that moved since the last round —
+ * "2 outs recorded, 1 strikeout" — so the number has a reason attached.
+ *
+ * Only stats the contest actually scores are described: a box score carries
+ * plenty that earns nothing, and listing it would bury what mattered.
+ */
+export function describeStatChange(
+  sport: Sport,
+  before: StatMap | undefined,
+  after: StatMap | undefined,
+  scored: Iterable<string>,
+): string {
+  if (!after) return '';
+  const parts: { text: string; size: number }[] = [];
+  for (const key of new Set(scored)) {
+    const from = numberAt(before, key);
+    const to = numberAt(after, key);
+    const change = Math.round((to - from) * 100) / 100;
+    if (change === 0) continue;
+    const m = statMeta(sport, key);
+    const magnitude = Math.abs(change);
+    const shown = Number.isInteger(magnitude) ? String(magnitude) : magnitude.toFixed(1);
+    parts.push({
+      text: `${change > 0 ? '+' : '−'}${shown} ${phraseFor(m, magnitude)}`,
+      size: magnitude,
+    });
+  }
+  if (parts.length === 0) return '';
+  // Biggest first: the home run is the news, the at-bat that came with it is not.
+  return parts
+    .sort((a, b) => b.size - a.size)
+    .slice(0, 4)
+    .map((part) => part.text)
+    .join(', ');
+}
+
+function numberAt(stats: StatMap | undefined, key: string): number {
+  const value = stats?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/** "receptions" for several, "reception" for one; set `phrase` to opt out. */
+function phraseFor(m: StatMeta, magnitude: number): string {
+  if (m.phrase) return m.phrase;
+  const label = m.label.replace(/\s*\(.*\)\s*$/, '').toLowerCase();
+  if (magnitude === 1 && label.endsWith('s') && !label.endsWith('ss')) return label.slice(0, -1);
+  return label;
 }

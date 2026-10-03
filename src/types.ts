@@ -237,6 +237,8 @@ export interface ScoringLogEntry {
   total: number;
   /** Stat line at the time, for context. */
   statLine?: string;
+  /** What moved: "+2 outs recorded, +1 strikeout". The reason for the points. */
+  change?: string;
   /** Where the game stood: "2nd & 10", "3rd 10:15", "LA 12 - DEN 10". */
   situation?: string;
   clock?: string;

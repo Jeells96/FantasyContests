@@ -40,6 +40,11 @@ const HITTING_MAP: Record<string, string> = {
   strikeOuts: 'so',
 };
 
+/** Fielding is read for errors alone; the rest of the box is already covered. */
+const FIELDING_MAP: Record<string, string> = {
+  errors: 'e',
+};
+
 const PITCHING_MAP: Record<string, string> = {
   strikeOuts: 'pitchSO',
   wins: 'pitchW',
@@ -110,6 +115,16 @@ function inningsToOuts(value: unknown): number {
 function statMapFromHitting(stat: any): StatMap {
   const out: StatMap = {};
   for (const [source, canonical] of Object.entries(HITTING_MAP)) {
+    const value = stat?.[source];
+    if (value === undefined || value === null) continue;
+    out[canonical] = toNumber(value);
+  }
+  return out;
+}
+
+function statMapFromFielding(stat: any): StatMap {
+  const out: StatMap = {};
+  for (const [source, canonical] of Object.entries(FIELDING_MAP)) {
     const value = stat?.[source];
     if (value === undefined || value === null) continue;
     out[canonical] = toNumber(value);
@@ -466,9 +481,13 @@ export class MlbProvider implements SportProvider {
         if (!id) continue;
         const batting = entry?.stats?.batting;
         const pitching = entry?.stats?.pitching;
+        const fielding = entry?.stats?.fielding;
         let stats: StatMap = {};
         if (batting && Object.keys(batting).length > 0) stats = { ...stats, ...statMapFromHitting(batting) };
         if (pitching && Object.keys(pitching).length > 0) stats = { ...stats, ...statMapFromPitching(pitching) };
+        // Only once they have otherwise played: a clean fielding line is posted
+        // for everyone on the roster, including players who never came on.
+        if (fielding && Object.keys(stats).length > 0) stats = { ...stats, ...statMapFromFielding(fielding) };
         if (Object.keys(stats).length === 0) continue;
         players[id] = applyDerivedStats('mlb', stats);
       }

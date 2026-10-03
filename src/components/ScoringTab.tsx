@@ -158,6 +158,8 @@ export function ScoringTab({
                       />
                       <span className="faint"> · {event.teamAbbr}</span>
                     </span>
+                    {/* Why the number moved, ahead of where the game stood. */}
+                    {event.change ? <span className="feed__change">{event.change}</span> : null}
                     {event.situation || event.clock || event.scoreLine ? (
                       <span className="board">
                         {event.situation ? <span className="board__cell">{event.situation}</span> : null}

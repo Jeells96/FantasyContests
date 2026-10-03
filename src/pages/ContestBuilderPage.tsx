@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Banner, Empty, KeyValue, Sheet, Spinner, SportPill, Toggle } from '../components/ui';
+import { Banner, Collapsible, Empty, KeyValue, Sheet, Spinner, SportPill, Toggle } from '../components/ui';
 import { createContest, getContest, getPool, updateContest } from '../lib/db';
 import { buildPlayerPool, listGamesRange, type ProviderGame } from '../lib/providers';
 import { withSpreads } from '../lib/providers/odds';
@@ -19,8 +19,8 @@ import { DEFAULT_CAPTAIN_MULTIPLIER } from '../lib/engine/captain';
 import { STATS_BY_SPORT, statMeta } from '../lib/stats';
 import { useSession } from '../state/SessionContext';
 import { FALLBACK_DEFAULTS, loadContestDefaults, type ContestDefaults } from '../lib/defaults';
-import { InvitePicker } from '../components/InvitePicker';
-import { canInvite, invitablePeople, loadPeople, type Person } from '../lib/people';
+import { InviteByPool } from '../components/InviteByPool';
+import { loadPeople, loadPools, type Person, type Pool } from '../lib/people';
 import type { ContestInvite } from '../types';
 import {
   SPORTS,
@@ -105,6 +105,7 @@ export function ContestBuilderPage() {
   const [existing, setExisting] = useState<Contest | null>(null);
   const [defaults, setDefaults] = useState<ContestDefaults>(FALLBACK_DEFAULTS);
   const [people, setPeople] = useState<Record<string, Person>>({});
+  const [pools, setPools] = useState<Pool[]>([]);
   const [invites, setInvites] = useState<ContestInvite[]>([]);
   const [wagerOn, setWagerOn] = useState(false);
   const [wagerAmount, setWagerAmount] = useState(5);
@@ -135,6 +136,9 @@ export function ContestBuilderPage() {
     let cancelled = false;
     void loadPeople().then((next) => {
       if (!cancelled) setPeople(next);
+    });
+    void loadPools().then((next) => {
+      if (!cancelled) setPools(next);
     });
     return () => {
       cancelled = true;
@@ -759,13 +763,13 @@ export function ContestBuilderPage() {
               </div>
             </div>
 
-            {canInvite(people, myKey) ? (
-              <InvitePicker
-                people={invitablePeople(people, myKey)}
-                invites={invites}
-                onChange={setInvites}
-              />
-            ) : null}
+            <InviteByPool
+              people={people}
+              pools={pools}
+              myKey={myKey}
+              invites={invites}
+              onChange={setInvites}
+            />
 
             {pricing ? (
               <>
@@ -818,8 +822,12 @@ function PricingSummary({ pricing }: { pricing: PricingResult }) {
 
   return (
     <div className="card">
-      <div className="section-title">
-        <h2 style={{ fontSize: 15 }}>Calculated pricing</h2>
+      <Collapsible
+        title="Calculated pricing"
+        summary={`${formatMoney(pricing.salaryCapInfo.cap)} cap · ${pricing.players.length} players`}
+      >
+      <div className="row row--between" style={{ margin: '10px 0 6px' }}>
+        <span className="tiny faint">How the cap and salaries were worked out</span>
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => setShowPlayers(true)}>
           Inspect salaries
         </button>
@@ -836,6 +844,7 @@ function PricingSummary({ pricing }: { pricing: PricingResult }) {
           value={`×${(pricing.normalization.factors[sport] ?? 1).toFixed(3)} (anchor ${(pricing.normalization.anchors[sport] ?? 0).toFixed(1)})`}
         />
       ))}
+      </Collapsible>
 
       {showPlayers ? (
         <Sheet title="Top salaries" onClose={() => setShowPlayers(false)}>
@@ -892,8 +901,7 @@ function RosterEditor({
 
       <p className="tiny muted" style={{ marginTop: 0 }}>
         Spots are interchangeable by default — any player from the pool fits any spot, which keeps multi-sport
-        contests simple. Entrants may leave spots empty if they run out of salary. Type positions into a spot to
-        restrict it.
+        contests simple.
       </p>
 
       <div className="scroll-x" style={{ marginBottom: 10 }}>
@@ -919,6 +927,16 @@ function RosterEditor({
           </button>
         ) : null}
       </div>
+
+      <Collapsible
+        title="Edit spots"
+        summary={describeRoster(slots)}
+      >
+      <p className="tiny muted" style={{ marginTop: 10 }}>
+        A spot marked <code>ANY</code> takes any player in the pool. Type positions into it
+        (<code>RB, WR, TE</code>) to restrict it, or pin it to a sport to reserve it for that sport's players.
+        Entrants may leave spots empty if they run out of salary.
+      </p>
 
       <div className="scroll-x" style={{ marginBottom: 10 }}>
         {sports.map((sport) => (
@@ -947,15 +965,18 @@ function RosterEditor({
               />
               <input
                 className="input"
-                value={slot.positions.join(', ')}
+                value={slot.positions.includes('*') ? 'ANY' : slot.positions.join(', ')}
                 aria-label="Eligible positions"
-                placeholder="RB, WR, TE or *"
+                placeholder="ANY, or RB, WR, TE"
                 onChange={(event) =>
                   update(index, {
-                    positions: event.target.value
-                      .split(',')
-                      .map((part) => part.trim().toUpperCase())
-                      .filter(Boolean),
+                    // "ANY" is how an open spot is written; `*` is how it is stored.
+                    positions: /^\s*(any|\*)\s*$/i.test(event.target.value)
+                      ? ['*']
+                      : event.target.value
+                          .split(',')
+                          .map((part) => part.trim().toUpperCase())
+                          .filter(Boolean),
                   })
                 }
               />
@@ -1000,12 +1021,21 @@ function RosterEditor({
       >
         + Add roster spot
       </button>
-      <p className="tiny faint" style={{ marginBottom: 0, marginTop: 8 }}>
-        <code>*</code> accepts any player. Listing positions (<code>RB, WR, TE</code>) restricts the spot, and
-        pinning it to a sport keeps that spot for that sport's pool.
-      </p>
+      </Collapsible>
     </div>
   );
+}
+
+/** "8 spots, any player" or "QB, RB×2, WR×3 …" — enough to leave the editor shut. */
+function describeRoster(slots: RosterSlot[]): string {
+  if (slots.length === 0) return 'no spots';
+  if (isOpenRoster(slots)) return `${slots.length} spots · any player`;
+  const counts = new Map<string, number>();
+  for (const slot of slots) {
+    const key = slot.positions.includes('*') ? 'ANY' : slot.positions.join('/');
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([key, n]) => (n > 1 ? `${key}×${n}` : key)).join(', ');
 }
 
 function ScoringEditor({
@@ -1040,11 +1070,10 @@ function ScoringEditor({
 
   return (
     <div className="card">
-      <div className="section-title">
-        <h2 style={{ fontSize: 15 }}>Scoring</h2>
-        <span className="tiny faint">points per stat</span>
-      </div>
-
+      <Collapsible
+        title="Scoring"
+        summary={`${sportsInScoring.map((sport) => SPORT_LABELS[sport]).join(' + ')} · standard points`}
+      >
       {sportsInScoring.map((sport) => {
         const table = scoring[sport];
         if (!table) return null;
@@ -1137,6 +1166,7 @@ function ScoringEditor({
           </div>
         );
       })}
+      </Collapsible>
     </div>
   );
 }

@@ -35,6 +35,9 @@ import { SPORT_LABELS, type ContestPlayer, type LineupSelection, type Sport } fr
 type Tab = 'lineup' | 'board' | 'scoring' | 'info';
 type SortKey = 'salary' | 'projection' | 'points';
 
+/** Entering runs in this order; a contest without picks or money skips those. */
+type EntryStep = 'roster' | 'picks' | 'wager';
+
 export function ContestPage() {
   const { contestId } = useParams<{ contestId: string }>();
   const { uid, identity } = useSession();
@@ -72,16 +75,37 @@ export function ContestPage() {
   const picksRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useSearchParams();
 
-  // Adopt the saved entry once, then let local edits stand.
+  /*
+   * Adopt the saved entry once, then let local edits stand.
+   *
+   * It only counts as "once" if it happens before anyone starts picking. On a
+   * slow connection the saved entry can land a minute after the page does, and
+   * adopting it then wipes whatever has been chosen in the meantime — which
+   * looks exactly like a roster that will not fill up.
+   */
   useEffect(() => {
     if (hydrated || !myEntry) return;
+    if (lineup.length > 0 || Object.keys(picks).length > 0) {
+      setHydrated(true);
+      return;
+    }
     setLineup(myEntry.lineup ?? []);
     setPicks(myEntry.picks ?? {});
     if (myEntry.teamName) setTeamName(myEntry.teamName);
-    // Already entered, so open on the standings rather than the builder.
-    setTab('board');
+    // Already entered, so open on the standings rather than the builder —
+    // unless a line has posted since, in which case the one thing they came
+    // back for is the game they could not call yet.
+    const unpicked = contest?.gameWinner.enabled
+      ? contest.games.filter((game) => hasSpread(game) && !(myEntry.picks ?? {})[game.id])
+      : [];
+    if (unpicked.length > 0 && !locked) {
+      setTab('lineup');
+      setEntryStep('picks');
+    } else {
+      setTab('board');
+    }
     setHydrated(true);
-  }, [myEntry, hydrated]);
+  }, [myEntry, hydrated, lineup.length, picks]);
 
   useEffect(() => {
     if (locked) setTab((current) => (current === 'lineup' ? 'board' : current));
@@ -146,6 +170,23 @@ export function ContestPage() {
   // can say whether it is a projection, a score so far, or a final one.
   const phases = useMemo(() => (contest ? phasesByGame(contest) : new Map()), [contest]);
 
+  /*
+   * Entering is three things in order: pick a team, call the games, say whether
+   * money is riding on it. Each was on one long page, which meant scrolling
+   * past a half-finished roster to find out the submit button was refusing for
+   * a reason written somewhere else. One at a time, and each only lets you on
+   * once it is done.
+   */
+  const steps = useMemo(
+    () =>
+      ['roster', ...(contest?.gameWinner.enabled ? ['picks' as const] : []), ...(contest?.wager ? ['wager' as const] : [])] as EntryStep[],
+    [contest?.gameWinner.enabled, contest?.wager],
+  );
+  const [entryStep, setEntryStep] = useState<EntryStep>('roster');
+  useEffect(() => {
+    if (!steps.includes(entryStep)) setEntryStep('roster');
+  }, [steps, entryStep]);
+
   const myStanding = useMemo(() => standings.find((row) => row.uid === uid), [standings, uid]);
   // Their recorded answer wins over anything typed in this tab.
   useEffect(() => {
@@ -159,10 +200,46 @@ export function ContestPage() {
     [contest],
   );
   const openPicks = pickableGames.filter((game) => !picks[game.id]).length;
-  const picksComplete = !contest?.gameWinner.enabled || openPicks === 0;
+  /** Roster rules only — the picks and the wager are later steps. */
+  const isPickError = (error: string) => /^Pick a winner|^Invalid winner/.test(error);
+  const rosterReady = Boolean(
+    validation && rosterComplete && !validation.errors.some((error) => !isPickError(error)),
+  );
+  /** Games whose line has posted but which have not been called yet. */
+  const openPickGames = useMemo(
+    () => pickableGames.filter((game) => !picks[game.id]),
+    [pickableGames, picks],
+  );
+  /** Games still waiting on a line; they can be called later, before lock. */
+  const awaitingLine = useMemo(
+    () => (contest?.gameWinner.enabled ? contest.games.filter((game) => !hasSpread(game)) : []),
+    [contest],
+  );
+  const picksReady = openPickGames.length === 0;
+  const wagerReady = !contest?.wager || wagerIn !== null;
+  const stepReady: Record<EntryStep, boolean> = {
+    roster: rosterReady,
+    picks: picksReady,
+    wager: wagerReady,
+  };
+  const stepIndex = Math.max(0, steps.indexOf(entryStep));
+  const canSubmit = Boolean(validation?.valid) && picksReady && wagerReady;
+  /** The one thing stopping this step, phrased for the step you are on. */
+  const stepBlocker = (() => {
+    if (entryStep === 'roster') {
+      const error = validation?.errors.find((e) => !isPickError(e));
+      return rosterReady ? null : error ?? null;
+    }
+    if (entryStep === 'picks') {
+      return picksReady
+        ? null
+        : `${openPickGames.length} game${openPickGames.length === 1 ? '' : 's'} still to call`;
+    }
+    return wagerReady ? null : 'Say whether you are in on the money';
+  })();
+
   // With the roster done but picks outstanding, the button moves the user on to
   // the picks rather than sitting disabled.
-  const showNext = rosterComplete && !picksComplete && Boolean(validation?.filledSlots);
 
   const activeSlot = contest?.rosterSlots.find((slot) => slot.id === activeSlotId) ?? null;
   const occupantOfActiveSlot = activeSlotId ? lineup.find((line) => line.slotId === activeSlotId) : undefined;
@@ -462,31 +539,15 @@ export function ContestPage() {
               type="button"
               className="btn btn--sm btn--primary"
               onClick={() => {
+                // Straight to the picker, which is now a step of its own
+                // rather than somewhere further down the same page.
                 setTab('lineup');
-                // Let the tab render before scrolling to the picks.
-                window.setTimeout(
-                  () => picksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-                  50,
-                );
+                setEntryStep('picks');
               }}
             >
               Go to picks
             </button>
           </div>
-        ) : null}
-
-        {tab === 'lineup' && contest.wager ? (
-          <WagerPrompt
-            contest={contest}
-            answer={wagerIn}
-            locked={locked}
-            onAnswer={(value) => {
-              setWagerIn(value);
-              // Written straight away once they are an entrant; otherwise it
-              // rides along with the lineup they are about to submit.
-              if (myEntry) void saveWagerIn(contest.id, uid, value).catch(() => undefined);
-            }}
-          />
         ) : null}
 
         {tab === 'lineup' ? (
@@ -504,6 +565,33 @@ export function ContestPage() {
           ) : (
             <div className="grid grid--builder">
               <div className="stack">
+                {steps.length > 1 ? (
+                  <div className="stepbar">
+                    {steps.map((step, index) => {
+                      const done = stepReady[step];
+                      const current = step === entryStep;
+                      // Going back is always allowed; going forward needs the
+                      // steps before it finished.
+                      const reachable =
+                        index <= stepIndex || steps.slice(0, index).every((earlier) => stepReady[earlier]);
+                      return (
+                        <button
+                          key={step}
+                          type="button"
+                          className={`stepbar__step${current ? ' stepbar__step--on' : ''}${done ? ' stepbar__step--done' : ''}`}
+                          disabled={!reachable}
+                          onClick={() => setEntryStep(step)}
+                        >
+                          <span className="stepbar__n">{done && !current ? '✓' : index + 1}</span>
+                          {step === 'roster' ? 'Roster' : step === 'picks' ? 'Picks' : 'Money'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {entryStep === 'roster' ? (
+                <>
                 <HowItWorks
                   contest={contest}
                   hasCaptain={hasCaptain}
@@ -619,6 +707,52 @@ export function ContestPage() {
                     <Empty title="No players match" hint="Clear the slot filter or search." />
                   ) : null}
                 </div>
+                </>
+                ) : null}
+
+                {entryStep === 'picks' ? (
+                  <div className="card" ref={picksRef}>
+                    <div className="section-title">
+                      <h2 style={{ fontSize: 15 }}>Call the games</h2>
+                      <span className="tiny faint">
+                        {pickableGames.filter((game) => Boolean(picks[game.id])).length}/{pickableGames.length}
+                      </span>
+                    </div>
+                    {/* A line that has not posted is not a reason to be stuck. */}
+                    {awaitingLine.length > 0 ? (
+                      <div className="banner banner--warn" style={{ marginBottom: 10 }}>
+                        <strong>
+                          {awaitingLine.length} {awaitingLine.length === 1 ? 'game has' : 'games have'} no line
+                          yet.
+                        </strong>{' '}
+                        Submit without {awaitingLine.length === 1 ? 'it' : 'them'} — you will be asked to call{' '}
+                        {awaitingLine.length === 1 ? 'it' : 'them'} here once the line posts, any time before
+                        the first game starts.
+                      </div>
+                    ) : null}
+                    <GamePicks
+                      games={contest.games}
+                      picks={picks}
+                      contestId={contest.id}
+                      bonusPoints={contest.gameWinner.bonusPoints}
+                      onPick={(gameId, teamId) => setPicks((current) => ({ ...current, [gameId]: teamId }))}
+                    />
+                  </div>
+                ) : null}
+
+                {entryStep === 'wager' && contest.wager ? (
+                  <WagerPrompt
+                    contest={contest}
+                    answer={wagerIn}
+                    locked={locked}
+                    onAnswer={(value) => {
+                      setWagerIn(value);
+                      // Written straight away once they are an entrant; otherwise
+                      // it rides along with the lineup they are about to submit.
+                      if (myEntry) void saveWagerIn(contest.id, uid, value).catch(() => undefined);
+                    }}
+                  />
+                ) : null}
               </div>
 
               <div className="stack" style={{ position: 'sticky', top: 70 }}>
@@ -642,33 +776,18 @@ export function ContestPage() {
                   />
                 </div>
 
-                {contest.gameWinner.enabled ? (
-                  <div className="card" ref={picksRef}>
-                    <div className="section-title">
-                      <h2 style={{ fontSize: 15 }}>Spread picks</h2>
-                      <span className="tiny faint">
-                        {pickableGames.filter((game) => Boolean(picks[game.id])).length}/{pickableGames.length}
-                      </span>
-                    </div>
-                    <GamePicks
-                      games={contest.games}
-                      picks={picks}
-                      contestId={contest.id}
-                      bonusPoints={contest.gameWinner.bonusPoints}
-                      onPick={(gameId, teamId) => setPicks((current) => ({ ...current, [gameId]: teamId }))}
-                    />
-                  </div>
-                ) : null}
-
-                {validation && validation.errors.length > 0 ? (
+                {validation && validation.errors.length > 0 && entryStep === 'roster' ? (
                   <div className="card card--tight">
                     <div className="eyebrow" style={{ marginBottom: 6 }}>
                       Before you submit
                     </div>
                     <ul className="tiny muted" style={{ margin: 0, paddingLeft: 18 }}>
-                      {validation.errors.slice(0, 5).map((error) => (
-                        <li key={error}>{error}</li>
-                      ))}
+                      {validation.errors
+                        .filter((error) => !isPickError(error))
+                        .slice(0, 5)
+                        .map((error) => (
+                          <li key={error}>{error}</li>
+                        ))}
                     </ul>
                   </div>
                 ) : null}
@@ -721,13 +840,14 @@ export function ContestPage() {
           used={salaryUsed}
           filled={validation?.filledSlots ?? 0}
           total={contest.rosterSlots.length}
-          blocker={showNext ? null : validation && !validation.valid ? validation.errors[0] : null}
+          blocker={stepBlocker}
           action={
-            showNext ? (
+            stepIndex < steps.length - 1 ? (
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={() => picksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                disabled={!stepReady[entryStep]}
+                onClick={() => setEntryStep(steps[stepIndex + 1])}
               >
                 Next
               </button>
@@ -735,7 +855,7 @@ export function ContestPage() {
               <button
                 type="button"
                 className="btn btn--go"
-                disabled={!validation?.valid || saving || !identity}
+                disabled={!canSubmit || saving || !identity}
                 onClick={submit}
               >
                 {saving ? <span className="spinner" /> : myEntry ? 'Update' : 'Submit'}

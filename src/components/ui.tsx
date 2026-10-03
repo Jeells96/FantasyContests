@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { SPORT_LABELS, type ContestStatus, type Sport } from '../types';
 
 export function SportPill({ sport }: { sport: Sport }) {
@@ -154,4 +154,42 @@ export function Initials({ name }: { name: string }) {
     .join('')
     .toUpperCase();
   return <span className="player__shot-initials">{initials}</span>;
+}
+
+/**
+ * A section that stays out of the way until it is wanted.
+ *
+ * Most of a contest's settings are ones most people never change, and a page
+ * of them buries the handful that matter. The summary says what the setting
+ * currently is, so the section can stay shut and still be informative.
+ */
+export function Collapsible({
+  title,
+  summary,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  summary?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="collapse">
+      <button
+        type="button"
+        className="collapse__head"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <span className="collapse__title">{title}</span>
+        {summary ? <span className="collapse__summary">{summary}</span> : null}
+        <span className={`collapse__chev${open ? ' collapse__chev--open' : ''}`} aria-hidden="true">
+          ›
+        </span>
+      </button>
+      {open ? <div className="collapse__body">{children}</div> : null}
+    </div>
+  );
 }

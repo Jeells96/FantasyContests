@@ -1,6 +1,7 @@
 import type { Contest, ContestGame, ContestPlayer, LineupSelection, RosterSlot } from '../../types';
 import { isEligible } from './roster';
 import { captainEnabled, captainMultiplier, effectiveSalary } from './captain';
+import { hasSpread } from './spread';
 
 export interface LineupValidation {
   valid: boolean;
@@ -103,9 +104,18 @@ export function validateLineup(
 }
 
 /** Game-winner picks must cover every game once they are enabled. */
+/**
+ * Only games that can actually be picked are required.
+ *
+ * A game whose line has not posted cannot be picked — the picker disables it —
+ * so demanding a pick for it was a deadlock: the entry could never be
+ * submitted and nothing on screen said why. Those games are picked later, when
+ * the line arrives and before the contest locks.
+ */
 export function validatePicks(picks: Record<string, string>, games: ContestGame[]): string[] {
   const errors: string[] = [];
   for (const game of games) {
+    if (!hasSpread(game)) continue;
     const pick = picks[game.id];
     if (!pick) {
       errors.push(`Pick a winner for ${game.shortName}`);

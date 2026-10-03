@@ -77,7 +77,16 @@ export function ContestBuilderPage() {
   const [date, setDate] = useState(todayISO());
   const [days, setDays] = useState(3);
   const [available, setAvailable] = useState<ProviderGame[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /*
+   * The games chosen so far, kept whole rather than as ids.
+   *
+   * A contest is often a weekend rather than a day — Sunday's slate plus Monday
+   * night, or a baseball game tonight and football tomorrow — and each of those
+   * is a separate look at the schedule. Holding ids into whichever list happens
+   * to be loaded meant every new search silently dropped what was already
+   * picked. Keeping the games means a search only adds to the shelf.
+   */
+  const [picked, setPicked] = useState<ProviderGame[]>([]);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [rosterSlots, setRosterSlots] = useState<RosterSlot[]>(buildDefaultRoster(['nfl']));
   const [scoring, setScoring] = useState<ContestScoring>(defaultScoringFor(['nfl']));
@@ -102,9 +111,25 @@ export function ContestBuilderPage() {
   const [wagerNote, setWagerNote] = useState('');
 
   const selectedGames = useMemo(
-    () => available.filter((game) => selectedIds.includes(game.id)),
-    [available, selectedIds],
+    () => [...picked].sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    [picked],
   );
+  const selectedIds = useMemo(() => new Set(picked.map((game) => game.id)), [picked]);
+
+  /** How many separate days the slate spans, as the person's calendar sees it. */
+  const pickedDays = useMemo(
+    () => new Set(picked.map((game) => new Date(game.startTime).toDateString())).size,
+    [picked],
+  );
+
+  /** Add a game to the shelf, or take it off. */
+  const toggleGame = useCallback((game: ProviderGame) => {
+    setPicked((current) =>
+      current.some((entry) => entry.id === game.id)
+        ? current.filter((entry) => entry.id !== game.id)
+        : [...current, game],
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,7 +178,7 @@ export function ContestBuilderPage() {
         setExisting(contest);
         setSports(contest.sports);
         setAvailable(contest.games);
-        setSelectedIds(contest.games.map((game) => game.id));
+        setPicked(contest.games);
         setPool(players.map(toPoolPlayer));
         setRosterSlots(contest.rosterSlots);
         setScoring(contest.scoring);
@@ -189,7 +214,11 @@ export function ContestBuilderPage() {
       const batches = await Promise.all(sports.map((sport) => listGamesRange(sport, start, days)));
       const games = batches.flat().sort((a, b) => a.startTime.localeCompare(b.startTime));
       setAvailable(games);
-      setSelectedIds((current) => current.filter((id) => games.some((game) => game.id === id)));
+      // Refresh anything already picked that this search also returned, so a
+      // reload updates start times and scores without losing the selection.
+      setPicked((current) =>
+        current.map((entry) => games.find((game) => game.id === entry.id) ?? entry),
+      );
     } catch (e) {
       setError(e instanceof Error ? `Could not load games: ${e.message}` : 'Could not load games');
     } finally {
@@ -440,14 +469,45 @@ export function ContestBuilderPage() {
               </button>
             </div>
 
-            <div className="card">
-              <div className="row row--between" style={{ marginBottom: 8 }}>
-                <div className="eyebrow">Games · {selectedIds.length} selected</div>
-                {selectedIds.length > 0 ? (
-                  <button type="button" className="btn btn--sm btn--ghost" onClick={() => setSelectedIds([])}>
+            {/* What is on the shelf, including games from searches already left
+                behind — otherwise a pick from another day is invisible here. */}
+            {selectedGames.length > 0 ? (
+              <div className="card">
+                <div className="row row--between" style={{ marginBottom: 8 }}>
+                  <div className="eyebrow">
+                    Your slate · {selectedGames.length} game{selectedGames.length === 1 ? '' : 's'}
+                    {pickedDays > 1 ? ` across ${pickedDays} days` : ''}
+                  </div>
+                  <button type="button" className="btn btn--sm btn--ghost" onClick={() => setPicked([])}>
                     Clear
                   </button>
-                ) : null}
+                </div>
+                <div className="list">
+                  {selectedGames.map((game) => (
+                    <button
+                      key={game.id}
+                      type="button"
+                      className="player player--selected"
+                      onClick={() => toggleGame(game)}
+                    >
+                      <span className="player__body">
+                        <span className="player__name">{game.shortName}</span>
+                        <span className="player__meta">{formatGameTime(game.startTime)}</span>
+                      </span>
+                      <span className="player__right">
+                        <SportPill sport={game.sport} />
+                        <span className="tiny faint">remove</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="card">
+              <div className="row row--between" style={{ marginBottom: 8 }}>
+                <div className="eyebrow">Schedule</div>
+                <span className="tiny faint">Change the date to add more days</span>
               </div>
 
               {loadingGames ? <Spinner label="Loading schedule…" /> : null}
@@ -457,17 +517,13 @@ export function ContestBuilderPage() {
 
               <div className="list">
                 {available.map((game) => {
-                  const checked = selectedIds.includes(game.id);
+                  const checked = selectedIds.has(game.id);
                   return (
                     <button
                       key={game.id}
                       type="button"
                       className={`player${checked ? ' player--selected' : ''}`}
-                      onClick={() =>
-                        setSelectedIds((current) =>
-                          current.includes(game.id) ? current.filter((id) => id !== game.id) : [...current, game.id],
-                        )
-                      }
+                      onClick={() => toggleGame(game)}
                     >
                       <span className="player__body">
                         <span className="player__name">{game.shortName}</span>
@@ -489,10 +545,10 @@ export function ContestBuilderPage() {
             <button
               type="button"
               className="btn btn--primary btn--block"
-              disabled={selectedIds.length === 0}
+              disabled={selectedGames.length === 0}
               onClick={() => setStep(2)}
             >
-              Continue with {selectedIds.length} game{selectedIds.length === 1 ? '' : 's'}
+              Continue with {selectedGames.length} game{selectedGames.length === 1 ? '' : 's'}
             </button>
           </div>
         ) : null}
@@ -744,8 +800,12 @@ export function ContestBuilderPage() {
 function defaultContestName(games: ProviderGame[]): string {
   if (games.length === 0) return 'New contest';
   const sports = Array.from(new Set(games.map((game) => game.sport))).map((s) => SPORT_LABELS[s]);
-  const date = new Date(earliestStart(games)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return `${sports.join(' + ')} ${games.length}-game slate · ${date}`;
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // A slate spanning days says so, rather than naming itself after the first.
+  const first = day(earliestStart(games));
+  const last = day(latestStart(games));
+  return `${sports.join(' + ')} ${games.length}-game slate · ${first === last ? first : `${first}–${last}`}`;
 }
 
 function PricingSummary({ pricing }: { pricing: PricingResult }) {

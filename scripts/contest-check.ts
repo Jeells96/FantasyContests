@@ -8,7 +8,7 @@
  */
 import { applyLiveResults } from '../src/lib/engine/liveSync';
 import { buildLeaderboard } from '../src/lib/engine/leaderboard';
-import { deriveStatus } from '../src/lib/engine/contestState';
+import { deriveStatus, earliestStart, latestStart } from '../src/lib/engine/contestState';
 import type { Contest, ContestGame } from '../src/types';
 import type { LiveGameStats } from '../src/lib/providers/types';
 import { gameStateFrom } from '../src/lib/providers/mlb';
@@ -172,6 +172,21 @@ check('a wager nobody took pays nothing', potFor(5, 0), 0);
   check('someone who took the bet is marked', by.get('a'), true);
   check('someone who declined is not', by.get('b'), false);
   check('someone never asked is not', by.get('c'), false);
+}
+
+/* A slate can span days, so the lock and the last game must come from the whole
+ * set rather than from whichever game was picked first. */
+{
+  const span = [
+    game('1', 'pre', '2026-10-05T23:00:00Z'),
+    game('2', 'pre', '2026-10-04T17:00:00Z'),
+    game('3', 'pre', '2026-10-06T02:00:00Z'),
+  ];
+  check('the lock is the earliest of them all', earliestStart(span), '2026-10-04T17:00:00Z');
+  check('the last game is the latest', latestStart(span), '2026-10-06T02:00:00Z');
+  // Picked in any order, since they are gathered over several searches.
+  const shuffled = [span[2], span[0], span[1]];
+  check('order picked does not matter', earliestStart(shuffled), '2026-10-04T17:00:00Z');
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);

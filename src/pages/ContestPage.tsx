@@ -383,31 +383,49 @@ export function ContestPage() {
     const released = currentPlayer ? captainPremium(currentPlayer, capMultiplier) : 0;
     const cost = captainPremium(player, capMultiplier) - released;
 
-    if (cost > cap - salaryUsed) {
-      // Naming someone who could go is more use than saying there is no room.
-      const short = cost - (cap - salaryUsed);
+    /*
+     * The captaincy moves even when it costs more than is left.
+     *
+     * Refusing was correct arithmetic and the wrong answer: a roster built to
+     * the cap has nothing spare, so naming a captain — the last thing anyone
+     * does — did nothing at all, and the explanation was something they had to
+     * notice rather than something they could act on. Letting it through makes
+     * the tap work and turns the problem into one the salary bar already states
+     * plainly and the submit button already refuses to ignore: a lineup over
+     * the cap, with the amount to find and somebody to drop named here.
+     */
+    const over = cost - (cap - salaryUsed);
+    if (over > 0) {
       const candidate = lineup
         .filter((line) => line.slotId !== slotId)
         .map((line) => playersById.get(line.playerId))
-        .filter((entry): entry is ContestPlayer => Boolean(entry) && entry!.salary >= short)
+        .filter((entry): entry is ContestPlayer => Boolean(entry) && entry!.salary >= over)
         .sort((a, b) => a.salary - b.salary)[0];
       setToast({
-        tone: 'bad',
-        text: `Captaining ${player.name} costs ${formatMoney(cost)} more and you have ${formatMoney(
-          cap - salaryUsed,
-        )} left.${candidate ? ` Drop ${candidate.name} (${formatMoney(candidate.salary)}) to make room.` : ' Drop someone first.'}`,
+        tone: 'warn',
+        text: `${player.name} is captain — that puts you ${formatMoney(over)} over the cap.${
+          candidate ? ` Drop ${candidate.name} (${formatMoney(candidate.salary)}) to fix it.` : ''
+        }`,
       });
-      return;
+    } else {
+      setToast(null);
     }
-
-    setToast(null);
     setLineup((current) => current.map((line) => ({ ...line, captain: line.slotId === slotId })));
   }
 
   function toggleCaptainSlot(slotId: string) {
     const line = lineup.find((entry) => entry.slotId === slotId);
     const player = line ? playersById.get(line.playerId) : undefined;
-    if (!line || !player) return;
+    // A tap that cannot be honoured still has to answer. Silence here is what
+    // made the button look broken in the first place.
+    if (!line || !player) {
+      setToast({ tone: 'bad', text: 'That player is still loading. Try again in a moment.' });
+      return;
+    }
+    if (locked) {
+      setToast({ tone: 'bad', text: 'The contest has locked, so the roster cannot change.' });
+      return;
+    }
     if (line.captain) {
       setLineup((current) => current.map((entry) => ({ ...entry, captain: false })));
       return;
@@ -509,7 +527,7 @@ export function ContestPage() {
   const myRow = leaderboard.find((row) => row.isSelf);
 
   return (
-    <main className="page page--wide">
+    <main className={`page page--wide${tab === 'lineup' && !locked ? ' page--bar' : ''}`}>
       <ScoreOverlay events={events} teamName={teamNameFor(identity)} />
 
       <div className="stack">

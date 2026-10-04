@@ -157,6 +157,11 @@ h4 {
   max-width: 1320px;
 }
 
+/* Room for the fixed bar, so the last player is never trapped behind it. */
+.page--bar {
+  padding-bottom: calc(190px + var(--safe-bottom));
+}
+
 .stack {
   display: flex;
   flex-direction: column;
@@ -699,10 +704,19 @@ h4 {
 
 /* ------------------------------------------------------------- salary bar --- */
 .salarybar {
-  position: sticky;
+  /*
+   * Fixed rather than sticky.
+   *
+   * Sticky needs its containing block to behave, and on iOS this one stopped
+   * pinning and came to rest in the middle of the player list with the rest of
+   * the list scrolling past it. A bar that must sit at the bottom of the
+   * screen should say so: fixed answers to the viewport and nothing else.
+   */
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 30;
-  margin: 0 -16px;
   padding: 10px 16px calc(10px + var(--safe-bottom));
   /*
    * Opaque, and deliberately NOT promoted to its own compositing layer.
@@ -718,6 +732,12 @@ h4 {
    */
   background: #080c18;
   border-top: 1px solid var(--line);
+}
+
+.salarybar > * {
+  max-width: 1120px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .salarybar__grid {

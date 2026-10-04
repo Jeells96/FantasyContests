@@ -100,15 +100,26 @@ export function WagerSettlement({
   onTogglePaid: (payerUid: string, paid: boolean) => void;
 }) {
   if (!contest.wager) return null;
-  const winner = rows[0];
   const inById = new Map(standings.map((row) => [row.uid, row.wagerIn === true]));
+  /*
+   * The pot goes to the best finish among the people who put money in, which
+   * is not always the contest's winner. Someone playing for fun can top the
+   * leaderboard without being owed a penny, and the money then belongs to
+   * whoever finished highest of those actually betting.
+   *
+   * Rows arrive in rank order, so the first one still in is that person.
+   */
   const betting = rows.filter((row) => inById.get(row.uid));
+  const winner = betting[0];
   if (!winner || betting.length < 2) return null;
 
   const amount = contest.wager.amount;
   const paid = new Set(contest.wagerPaid ?? []);
-  const iWon = winner.uid === uid && inById.get(uid) === true;
-  const owing = betting.filter((row) => row.uid !== winner.uid);
+  const iWon = winner.uid === uid;
+  const owing = betting.slice(1);
+  /** Set when the contest was won by somebody who was not playing for money. */
+  const leader = rows[0];
+  const leaderSatOut = Boolean(leader && leader.uid !== winner.uid);
   const settled = owing.filter((row) => paid.has(row.uid)).length;
 
   // Someone who merely lost needs one line, not a ledger.
@@ -120,9 +131,12 @@ export function WagerSettlement({
           <h2 style={{ fontSize: 15 }}>Money</h2>
         </div>
         <p className="tiny muted" style={{ margin: 0 }}>
-          {winner.teamName ?? winner.displayName} won{' '}
+          {winner.teamName ?? winner.displayName} took the pot —{' '}
           {formatWager(amount * owing.length)} from {owing.length}{' '}
           {owing.length === 1 ? 'player' : 'players'}.
+          {leaderSatOut
+            ? ` ${leader.displayName} finished higher but was playing for fun.`
+            : ''}
           {iOwe
             ? ` You owe ${winner.displayName} ${formatWager(amount)}${paid.has(uid) ? ' — marked paid.' : '.'}`
             : ''}
@@ -160,8 +174,11 @@ export function WagerSettlement({
       </div>
       <p className="tiny faint" style={{ margin: '8px 0 0' }}>
         {formatWager(amount * (owing.length - settled))} still out of{' '}
-        {formatWager(amount * owing.length)}. Ticking someone off is just a note to yourself — no money
-        moves through here.
+        {formatWager(amount * owing.length)}.
+        {leaderSatOut
+          ? ` You finished highest of everyone betting; ${leader.displayName} placed above you but was playing for fun.`
+          : ''}{' '}
+        Ticking someone off is just a note to yourself — no money moves through here.
       </p>
     </div>
   );

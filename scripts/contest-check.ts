@@ -265,5 +265,17 @@ check('a wager nobody took pays nothing', potFor(5, 0), 0);
   check('their roster is still visible', theirs?.lines !== null, true);
 }
 
+/* The pot belongs to the best finish among those who put money in. */
+{
+  // Rows arrive in rank order; the component takes the first one still betting.
+  const potWinner = (ranked: { uid: string }[], inById: Record<string, boolean>) =>
+    ranked.filter((row) => inById[row.uid])[0]?.uid;
+  const field = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  check('the leader takes it when they are in', potWinner(field, { a: true, b: true, c: true }), 'a');
+  check('a leader playing for fun does not', potWinner(field, { a: false, b: true, c: true }), 'b');
+  check('it falls to whoever is highest and in', potWinner(field, { a: false, b: false, c: true }), 'c');
+  check('nobody in, nobody owed', potWinner(field, { a: false, b: false, c: false }), undefined);
+}
+
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
